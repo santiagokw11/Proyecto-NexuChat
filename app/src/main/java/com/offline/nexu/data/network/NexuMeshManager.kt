@@ -5,10 +5,12 @@ import android.util.Log
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
 
+// Manager para la red Mesh. En teoría es genial, en la práctica es casi brujería. 🧙‍♂️
 class NexuMeshManager(private val context: Context, private val nickname: String) {
 
     private val connectionsClient: ConnectionsClient = Nearby.getConnectionsClient(context)
-    private val STRATEGY = Strategy.P2P_CLUSTER // Ideal para redes Mesh / Colmena
+    // Ideal para redes Mesh / Colmena (ojalá funcione bien cuando seamos muchos)
+    private val STRATEGY = Strategy.P2P_CLUSTER
     private val SERVICE_ID = "com.offline.nexu.MESH_NETWORK"
 
     // Variables para el cálculo de latencia
@@ -46,7 +48,7 @@ class NexuMeshManager(private val context: Context, private val nickname: String
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
-            // En la fase 1 aceptamos todas las conexiones automáticamente
+            // En la fase 1 aceptamos todas las conexiones automáticamente. YOLO. 🚀
             connectionsClient.acceptConnection(endpointId, payloadCallback)
         }
 
@@ -88,7 +90,8 @@ class NexuMeshManager(private val context: Context, private val nickname: String
     }
 
     private fun calcularDistanciaAproximada(latenciaMs: Long) {
-        // La latencia inalámbrica fluctúa, esta es una aproximación cualitativa
+        // La latencia inalámbrica fluctúa muchísimo, así que esta es una aproximación cualitativa
+        // Básicamente, a puro ojo y suerte midiendo milisegundos 😂
         val estimacion = when {
             latenciaMs < 20 -> "Muy Cerca (< 5m)"
             latenciaMs in 20..60 -> "Cerca (5m - 20m)"

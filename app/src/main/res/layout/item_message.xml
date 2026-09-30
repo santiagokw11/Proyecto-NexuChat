@@ -1,97 +1,180 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:paddingStart="8dp"
-    android:paddingEnd="8dp"
-    android:paddingTop="4dp"
-    android:paddingBottom="4dp">
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="4dp">
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/tvDateSeparator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/button_rounded"
+        android:backgroundTint="@color/surface_card"
+        android:elevation="1dp"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="6dp"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layoutSent"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="end"
-        android:maxWidth="280dp"
+        android:layout_marginTop="8dp"
         android:background="@drawable/bg_msg_sent"
-        android:orientation="vertical"
         android:padding="6dp"
-        android:visibility="gone">
+        android:visibility="gone"
+        app:layout_constrainedWidth="true"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvDateSeparator"
+        app:layout_constraintWidth_max="310dp">
 
         <androidx.cardview.widget.CardView
             android:id="@+id/cvImageSent"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:visibility="gone"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="0dp">
+            app:cardCornerRadius="10dp"
+            app:cardElevation="0dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintWidth_min="260dp">
+
             <ImageView
                 android:id="@+id/ivSent"
-                android:layout_width="220dp"
-                android:layout_height="220dp"
-                android:scaleType="centerCrop"/>
+                android:layout_width="match_parent"
+                android:layout_height="260dp"
+                android:minWidth="260dp"
+                android:scaleType="centerCrop" />
         </androidx.cardview.widget.CardView>
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/tvTextSent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="bottom|end"
+            android:layout_marginStart="6dp"
             android:layout_marginTop="4dp"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp">
+            android:layout_marginBottom="2dp"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            app:layout_constrainedWidth="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/timeContainerSent"
+            app:layout_constraintHorizontal_bias="0.0"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/cvImageSent" />
+
+        <LinearLayout
+            android:id="@+id/timeContainerSent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginBottom="2dp"
+            android:gravity="bottom"
+            android:orientation="horizontal"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/tvTextSent">
 
             <TextView
-                android:id="@+id/tvTextSent"
+                android:id="@+id/tvTimeSent"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#000000"
-                android:textSize="16sp"
-                android:layout_marginEnd="8dp"/>
+                android:layout_marginEnd="4dp"
+                android:textColor="#CCFFFFFF"
+                android:textSize="10sp" />
 
             <ImageView
                 android:id="@+id/ivMessageStatus"
                 android:layout_width="14dp"
                 android:layout_height="14dp"
+                app:tint="#FFFFFF"
                 android:src="@drawable/ic_msg_clock" />
         </LinearLayout>
-    </LinearLayout>
 
-    <LinearLayout
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layoutReceived"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="start"
-        android:maxWidth="280dp"
+        android:layout_marginTop="8dp"
         android:background="@drawable/bg_msg_received"
-        android:orientation="vertical"
         android:padding="6dp"
-        android:visibility="gone">
+        android:visibility="gone"
+        app:layout_constrainedWidth="true"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvDateSeparator"
+        app:layout_constraintWidth_max="310dp">
 
         <androidx.cardview.widget.CardView
             android:id="@+id/cvImageReceived"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:visibility="gone"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="0dp">
+            app:cardCornerRadius="10dp"
+            app:cardElevation="0dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintWidth_min="260dp">
+
             <ImageView
                 android:id="@+id/ivReceived"
-                android:layout_width="220dp"
-                android:layout_height="220dp"
-                android:scaleType="centerCrop"/>
+                android:layout_width="match_parent"
+                android:layout_height="260dp"
+                android:minWidth="260dp"
+                android:scaleType="centerCrop" />
         </androidx.cardview.widget.CardView>
 
         <TextView
             android:id="@+id/tvTextReceived"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:layout_marginTop="4dp"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
+            android:layout_marginBottom="2dp"
             android:textColor="@color/text_primary"
-            android:textSize="16sp"/>
-    </LinearLayout>
-</LinearLayout>
+            android:textSize="16sp"
+            app:layout_constrainedWidth="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/timeContainerReceived"
+            app:layout_constraintHorizontal_bias="0.0"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/cvImageReceived" />
+
+        <LinearLayout
+            android:id="@+id/timeContainerReceived"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginBottom="2dp"
+            android:gravity="bottom"
+            android:orientation="horizontal"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/tvTextReceived">
+
+            <TextView
+                android:id="@+id/tvTimeReceived"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

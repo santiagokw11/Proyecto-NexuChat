@@ -5,11 +5,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.offline.nexu.ui.home.P2PManager
 
+// Servicio en primer plano para que Android no nos mate la conexión P2P cuando el usuario minimiza la app.
+// Si Android decide matarlo de todas formas, pues ya no podemos hacer más nada 🤷‍♂️
 class ConnectionService : Service() {
 
     private val CHANNEL_ID = "NexuConnectionService"
@@ -27,8 +30,13 @@ class ConnectionService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        // Inicia el servicio en primer plano para que Android no lo mate
-        startForeground(1, notification)
+        // Inicia el servicio en primer plano para que Android no lo mate (o al menos lo piense dos veces)
+        // En Android 14+ es obligatorio decir de qué tipo es el servicio.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        } else {
+            startForeground(1, notification)
+        }
 
         // Aquí puedes inicializar tu lógica de P2PManager si no está iniciada
         return START_STICKY
@@ -36,7 +44,7 @@ class ConnectionService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Solo aquí se debe limpiar la sesión, cuando el servicio se detiene explícitamente
+        // Solo aquí se debe limpiar la sesión, cuando el servicio se detiene explícitamente (o si el sistema nos tira brutalmente).
         P2PManager.clearSession()
     }
 

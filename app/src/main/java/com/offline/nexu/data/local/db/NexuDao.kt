@@ -19,9 +19,10 @@ interface NexuDao {
     @Query("SELECT * FROM messages WHERE id IN (SELECT MAX(id) FROM messages GROUP BY endpointId) ORDER BY timestamp DESC")
     fun getRecentChats(): List<MessageEntity>
 
-    @Query("SELECT imagePath FROM messages WHERE endpointId = :endpointId AND imagePath IS NOT NULL AND imagePath != '' ORDER BY timestamp DESC")
-    fun getSharedImages(endpointId: String): List<String>
-
     @Query("DELETE FROM messages WHERE endpointId = :endpointId")
     fun deleteAllMessagesFrom(endpointId: String)
+
+    // NUEVA CONSULTA: Obtener solo rutas de imágenes que no sean nulas ni vacías
+    @Query("SELECT imagePath FROM messages WHERE endpointId = :endpointId AND imagePath IS NOT NULL AND imagePath != '' ORDER BY timestamp DESC")
+    fun getSharedImages(endpointId: String): List<String>
 }
