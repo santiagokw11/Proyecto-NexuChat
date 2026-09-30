@@ -1,58 +1,97 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/messageContainer"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingTop="2dp"
-    android:paddingBottom="2dp"
     android:paddingStart="8dp"
-    android:paddingEnd="8dp">
+    android:paddingEnd="8dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
 
     <LinearLayout
-        android:id="@+id/bubbleLayout"
+        android:id="@+id/layoutSent"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="@drawable/circle_background"
+        android:layout_gravity="end"
+        android:maxWidth="280dp"
+        android:background="@drawable/bg_msg_sent"
         android:orientation="vertical"
-        android:padding="4dp"
-        android:minWidth="80dp">
+        android:padding="6dp"
+        android:visibility="gone">
 
         <androidx.cardview.widget.CardView
-            android:id="@+id/cvImage"
-            android:layout_width="260dp"
-            android:layout_height="260dp"
-            app:cardCornerRadius="8dp"
-            app:cardElevation="0dp"
-            app:cardBackgroundColor="#22FFFFFF"
-            android:visibility="gone">
+            android:id="@+id/cvImageSent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp">
+            <ImageView
+                android:id="@+id/ivSent"
+                android:layout_width="220dp"
+                android:layout_height="220dp"
+                android:scaleType="centerCrop"/>
+        </androidx.cardview.widget.CardView>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="bottom|end"
+            android:layout_marginTop="4dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp">
+
+            <TextView
+                android:id="@+id/tvTextSent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#000000"
+                android:textSize="16sp"
+                android:layout_marginEnd="8dp"/>
 
             <ImageView
-                android:id="@+id/ivMessageImage"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="centerCrop" />
+                android:id="@+id/ivMessageStatus"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_msg_clock" />
+        </LinearLayout>
+    </LinearLayout>
 
-            <ProgressBar
-                android:id="@+id/pbLoading"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_gravity="center"
-                android:visibility="gone" />
+    <LinearLayout
+        android:id="@+id/layoutReceived"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start"
+        android:maxWidth="280dp"
+        android:background="@drawable/bg_msg_received"
+        android:orientation="vertical"
+        android:padding="6dp"
+        android:visibility="gone">
+
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cvImageReceived"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp">
+            <ImageView
+                android:id="@+id/ivReceived"
+                android:layout_width="220dp"
+                android:layout_height="220dp"
+                android:scaleType="centerCrop"/>
         </androidx.cardview.widget.CardView>
 
         <TextView
-            android:id="@+id/tvMessage"
+            android:id="@+id/tvTextReceived"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:maxWidth="260dp"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="2dp"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp" />
+            android:layout_marginTop="4dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"/>
     </LinearLayout>
-
 </LinearLayout>

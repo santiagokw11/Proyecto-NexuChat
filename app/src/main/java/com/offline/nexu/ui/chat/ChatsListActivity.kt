@@ -20,12 +20,12 @@ class ChatsListActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Preparo el diseño visual de esta pantalla usando ViewBinding.
+        // Inflo la vista de esta pantalla con ViewBinding porque ya estamos grandes para andar usando findViewById en todos lados.
         binding = ActivityChatsListBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Configuro mi adaptador para la lista de chats. 
-        // Si alguien toca un chat, abriré ChatActivity mandando el ID de esa persona.
+        // Preparo mi adaptador para la lista de chats. 
+        // Si el usuario le da tap a algún chat viejo, lo mando de cabeza a la pantalla de ChatActivity con el ID del loco.
         adapter = ChatListAdapter { endpointId ->
             val intent = Intent(this, ChatActivity::class.java)
             intent.putExtra("TARGET_ENDPOINT", endpointId)
@@ -33,14 +33,16 @@ class ChatsListActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        // Le digo a la lista que muestre los elementos uno debajo del otro, y le pego el adaptador.
+        // Le digo al RecyclerView que ponga los ítems en filita, uno abajo del otro, y le enchufo el adaptador.
         binding.rvChats.layoutManager = LinearLayoutManager(this)
         binding.rvChats.adapter = adapter
 
-        // Marco la pestaña "Chats" como seleccionada en la barra de navegación de abajo.
+        // Prendo la lucecita del botón de "Chats" en la barrita de abajo para que el usuario no se pierda.
         binding.bottomNavigation.selectedItemId = R.id.nav_chats
         
-        // Aquí configuro la barra de abajo para que cuando toque otro botón, me mueva a esa pantalla.
+        // Hago andar los botoncitos de abajo. 
+        // Si toca el radar o el perfil, lanzo el intent. 
+        // Le clavo el CLEAR_TOP para no armar una torre infinita de pantallas en memoria que me coma toda la RAM.
         binding.bottomNavigation.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_radar -> { startActivity(Intent(this, HomeActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_CLEAR_TOP }); overridePendingTransition(0, 0); true }
@@ -53,14 +55,14 @@ class ChatsListActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Cuando vuelvo a esta pantalla, me aseguro de que el botón "Chats" de abajo siga iluminado.
+        // Por las dudas, cada vez que vuelvo a esta pantalla, me aseguro de que el botón de "Chats" de abajo siga iluminado.
         binding.bottomNavigation.selectedItemId = R.id.nav_chats
         
-        // Uso una corrutina para buscar en segundo plano los últimos chats que tuve en mi base de datos.
+        // Mando una corrutina a la DB (IO) porque Android me tira bronca si busco los mensajes desde el hilo principal.
         lifecycleScope.launch(Dispatchers.IO) {
             val recentChats = AppDatabase.getDatabase(this@ChatsListActivity).nexuDao().getRecentChats()
             
-            // Cuando la base de datos me devuelve los chats, le digo a mi adaptador que los dibuje en la pantalla.
+            // Vuelvo al hilo Main y le clavo la lista de chats que encontré al adapter para que los dibuje posta.
             withContext(Dispatchers.Main) { adapter.submitList(recentChats) }
         }
     }

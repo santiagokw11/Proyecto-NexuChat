@@ -3,8 +3,9 @@ package com.offline.nexu.data.model
 import android.net.Uri
 
 data class Message(
+    val id: Long, // ID único para rastrear los chulos
     val text: String,
-    val imageUri: Uri? = null,
+    val imageUri: Uri?,
     val isMine: Boolean,
-    val payloadId: Long? = null // Conecta el texto con la descarga de la imagen
+    var status: Int = 0 // 0 = Reloj, 1 = Un chulo, 2 = Dos chulos
 )

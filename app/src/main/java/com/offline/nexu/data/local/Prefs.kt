@@ -21,22 +21,20 @@ class Prefs(context: Context) {
     fun isRegistered(): Boolean = storage.contains("username")
 
     fun getUserProfile(): UserProfile {
-        val jsonString = storage.getString("user_profile_json", "")
-        return if (jsonString.isNullOrEmpty()) {
+        val jsonString = storage.getString("user_profile", null)
+        return if (jsonString != null) {
+            UserProfile.fromJson(jsonString)
+        } else {
             UserProfile(
                 name = getUsername(),
                 avatar = getAvatar()
             )
-        } else {
-            UserProfile.fromJson(jsonString)
         }
     }
 
     fun saveUserProfile(profile: UserProfile) {
         storage.edit().apply {
-            putString("user_profile_json", profile.toJson())
-            putString("username", profile.name)
-            putString("avatar", profile.avatar)
+            putString("user_profile", profile.toJson())
             apply()
         }
     }

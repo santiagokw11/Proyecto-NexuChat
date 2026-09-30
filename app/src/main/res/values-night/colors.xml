@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+
+    <color name="primary_color">#00F0FF</color> <color name="secondary_color">#448AFF</color>
+
+    <color name="background_main">#0B0F19</color> <color name="surface_card">#151A28</color>
+
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#8A95A5</color>
+
+    <color name="input_bg">#151A28</color>
+    <color name="input_border">#37474F</color>
+    <color name="button_bg">#00F0FF</color>
+    <color name="button_text">#000000</color> </resources>

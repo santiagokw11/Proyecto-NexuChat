@@ -24,33 +24,34 @@ class MediaVaultActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Aquí arranca la pantalla. Lo primero que hago es preparar el diseño visual conectando el ViewBinding.
+        // Acá arranco y conecto el ViewBinding porque me da tremenda paja hacer findViewById de todo.
         binding = ActivityMediaVaultBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Obtengo el nombre del contacto desde la pantalla anterior para saber de quién son los archivos.
+        // Saco el nombre del contacto del intent para saber qué onda. Si falla, va "Desconocido" y rezamos.
         contactName = intent.getStringExtra("EXTRA_USER_NAME") ?: "Desconocido"
-        // Inicializo mi base de datos para poder buscar las imágenes guardadas.
+        
+        // Instancio la base de datos de Room.
         db = AppDatabase.getDatabase(this)
 
-        // Botón simple para volver atrás y cerrar esta pantalla.
+        // Este botón corta el mambo y te manda para atrás, cortita y al pie.
         binding.btnBack.setOnClickListener { finish() }
 
-        // Configuro la lista para que las imágenes se vean como una cuadrícula de 3 columnas, estilo galería.
+        // Pongo el recycler con GridLayoutManager para que quede facherito tipo galería en 3 columnas.
         binding.rvMedia.layoutManager = GridLayoutManager(this, 3)
 
-        // Llamo a mis funciones para cargar los datos y configurar los botones de las pestañas.
+        // Cargo las fotos y armo el bardo de las pestañitas de arriba.
         cargarImagenes()
         setupCustomTabs()
     }
 
     private fun cargarImagenes() {
-        // Uso corrutinas para buscar en la base de datos en segundo plano y no congelar la pantalla de la app.
+        // Mando corrutina en IO. Si no hago esto, Android se re calienta y crashea la app por leer la DB en el Main thread.
         lifecycleScope.launch(Dispatchers.IO) {
-            // Busco todas las imágenes que he compartido con este contacto en específico.
+            // Busco todas las imágenes que mandé o me mandaron con este chabón.
             imagesList = db.nexuDao().getSharedImages(contactName)
             
-            // Vuelvo al hilo principal (la interfaz gráfica) para mostrar las imágenes que encontré.
+            // Vuelvo al hilo principal porque tocar la UI desde IO te escupe una excepción roja gigante.
             withContext(Dispatchers.Main) {
                 mostrarMultimedia()
             }
@@ -58,29 +59,28 @@ class MediaVaultActivity : AppCompatActivity() {
     }
 
     private fun setupCustomTabs() {
-        // Configuro qué pasa cuando toco cada pestaña (Media, Documentos, Enlaces).
+        // Hago andar las pestañitas de arriba. Básicamente pinto la que toco y cambio lo que se ve abajo.
         
         binding.tabMedia.setOnClickListener {
             seleccionarPestaña(binding.tabMedia)
-            mostrarMultimedia() // Muestro la cuadrícula de fotos.
+            mostrarMultimedia() // Acá sí muestro la cuadrícula posta.
         }
         
         binding.tabDocs.setOnClickListener {
             seleccionarPestaña(binding.tabDocs)
-            // Como aún no tengo documentos, solo muestro un mensaje de que está vacío.
+            // Como todavía no programé lo de documentos, tiro humo diciendo que no hay nada encriptado jaja.
             mostrarMensajeVacio("Sin documentos encriptados")
         }
         
         binding.tabLinks.setOnClickListener {
             seleccionarPestaña(binding.tabLinks)
-            // Igual que con los documentos, por ahora solo muestro un mensaje de vacío.
+            // Lo mismo para los links, humo cósmico por ahora.
             mostrarMensajeVacio("Sin enlaces compartidos")
         }
     }
 
     private fun seleccionarPestaña(tabSeleccionada: TextView) {
-        // Primero, devuelvo todas las pestañas a su estado normal ("apagadas").
-        // Les quito el fondo y les pongo la letra en su color secundario normal.
+        // Esta función me costó un toque pensarla, pero básicamente "apago" todas las pestañas primero...
         val tabs = listOf(binding.tabMedia, binding.tabDocs, binding.tabLinks)
         for (tab in tabs) {
             tab.background = null
@@ -88,8 +88,8 @@ class MediaVaultActivity : AppCompatActivity() {
             tab.setTypeface(null, Typeface.NORMAL)
         }
 
-        // Luego, "enciendo" solo la pestaña que acabo de tocar.
-        // Le pongo un fondo redondeado, cambio el color de letra y la pongo en negrita para que resalte.
+        // ... y después "prendo" solo la que toqué pasándole la vista por parámetro.
+        // Le clavo un fondo con bordes, negrita y color primario para que se re note.
         tabSeleccionada.setBackgroundResource(R.drawable.button_rounded)
         tabSeleccionada.backgroundTintList = ContextCompat.getColorStateList(this, R.color.surface_card)
         tabSeleccionada.setTextColor(ContextCompat.getColor(this, R.color.primary_color))
@@ -97,18 +97,18 @@ class MediaVaultActivity : AppCompatActivity() {
     }
 
     private fun mostrarMultimedia() {
-        // Verifico si encontré imágenes en la base de datos.
+        // Me fijo si la consulta a la BD trajo algo.
         if (imagesList.isEmpty()) {
-            // Si la lista está vacía, muestro mi mensaje por defecto.
+            // Si no hay nada, clavo el layout feo de que está vacío.
             mostrarMensajeVacio("No hay medios en la bóveda")
         } else {
-            // Si tengo fotos, oculto el mensaje de "vacío" y hago visible mi cuadrícula.
+            // Si hay fotos, escondo el mensaje pedorro y muestro la galería posta.
             binding.layoutEmptyState.visibility = View.GONE
             binding.rvMedia.visibility = View.VISIBLE
             
-            // Le paso la lista de imágenes al adaptador para que las dibuje en pantalla.
+            // Le paso la lista al adapter que armé para esto.
             binding.rvMedia.adapter = MediaVaultAdapter(imagesList) { uri ->
-                // Si el usuario toca una imagen, abro el visor de imágenes a pantalla completa.
+                // Si el chabón toca una foto, abro la otra Activity que armé para ver la imagen en grande.
                 val intent = Intent(this@MediaVaultActivity, ImageViewerActivity::class.java)
                 intent.putExtra("IMAGE_URI", uri)
                 startActivity(intent)
@@ -117,7 +117,7 @@ class MediaVaultActivity : AppCompatActivity() {
     }
 
     private fun mostrarMensajeVacio(mensaje: String) {
-        // Esta función me sirve para esconder la cuadrícula y en su lugar mostrar un texto en medio de la pantalla.
+        // Funciocinta rápida para esconder el recycler y mostrar el TextView de "acá no hay nada".
         binding.rvMedia.visibility = View.GONE
         binding.layoutEmptyState.visibility = View.VISIBLE
         binding.tvEmptyState.text = mensaje

@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.offline.nexu"
-    compileSdk = 34 // Ajustado para compatibilidad estable
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.offline.nexu"
@@ -22,22 +22,21 @@ android {
 }
 
 dependencies {
+    // Room Database
+    val room_version = "2.6.1"
+    implementation("androidx.room:room-runtime:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
+    ksp("androidx.room:room-compiler:$room_version")
+
+    // Material Design
+    implementation("com.google.android.material:material:1.11.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
-
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
-
+    testImplementation("junit:junit:4.13.2")
     // API FUNDAMENTAL PARA EL PROYECTO
     implementation("com.google.android.gms:play-services-nearby:19.0.0")
-
-    // Pruebas
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
 }
