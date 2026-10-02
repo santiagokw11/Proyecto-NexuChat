@@ -38,5 +38,5 @@ dependencies {
     implementation(libs.androidx.navigation.ui.ktx)
     testImplementation("junit:junit:4.13.2")
     // API FUNDAMENTAL PARA EL PROYECTO
-    implementation("com.google.android.gms:play-services-nearby:19.0.0")
+    implementation("com.google.android.gms:play-services-nearby:19.5.1")
 }
