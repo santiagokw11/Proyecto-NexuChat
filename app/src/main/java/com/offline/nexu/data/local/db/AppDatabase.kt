@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [MessageEntity::class], version = 2, exportSchema = false)
+@Database(entities = [MessageEntity::class, GroupEntity::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun nexuDao(): NexuDao
 
@@ -20,7 +20,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "nexu_database"
                 )
-                    .fallbackToDestructiveMigration() // Evita crasheos al cambiar la estructura de las tablas
+                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance

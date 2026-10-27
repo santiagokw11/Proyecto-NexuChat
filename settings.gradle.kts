@@ -22,6 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Nexu Chat"
+rootProject.name = "Nexu"
 include(":app")
- 

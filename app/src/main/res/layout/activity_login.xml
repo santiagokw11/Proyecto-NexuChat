@@ -92,12 +92,25 @@
         android:id="@+id/btnRegister"
         android:layout_width="match_parent"
         android:layout_height="64dp"
-        android:layout_marginBottom="32dp"
+        android:layout_marginTop="32dp"
         android:background="@drawable/button_rounded"
         android:text="INICIAR NEXO"
         android:textColor="@color/button_text"
         android:textSize="18sp"
         android:textStyle="bold"
-        app:layout_constraintBottom_toBottomOf="parent" />
+        app:layout_constraintTop_toBottomOf="@id/layoutPass" />
+
+    <Button
+        android:id="@+id/btnViewAccounts"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Ver cuentas guardadas"
+        android:textColor="@color/text_secondary"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnRegister" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

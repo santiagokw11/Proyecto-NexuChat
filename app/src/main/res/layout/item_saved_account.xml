@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="12dp"
+    android:background="@drawable/button_rounded"
+    android:backgroundTint="@color/input_bg"
+    android:gravity="center_vertical">
+
+    <TextView
+        android:id="@+id/tvItemAvatar"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:background="@drawable/circle_background"
+        android:backgroundTint="@color/background_main"
+        android:gravity="center"
+        android:text="👤"
+        android:textSize="24sp" />
+
+    <TextView
+        android:id="@+id/tvItemName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="16dp"
+        android:text="Nickname"
+        android:textColor="@color/text_primary"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <ImageView
+        android:id="@+id/btnDeleteAccount"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:padding="8dp"
+        android:src="@drawable/ic_close"
+        app:tint="#F44336"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true" />
+</LinearLayout>

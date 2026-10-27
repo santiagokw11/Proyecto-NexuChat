@@ -30,41 +30,71 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"/>
 
-            <TextView
-                android:id="@+id/tvHeaderAvatar"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_marginStart="12dp"
-                android:background="@drawable/circle_background"
-                android:backgroundTint="@color/input_bg"
-                android:gravity="center"
-                android:text="👽"
-                android:textSize="20sp"
-                app:layout_constraintTop_toTopOf="parent"
+            <LinearLayout
+                android:id="@+id/llChatHeaderInfo"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="4dp"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toEndOf="@id/btnBack"/>
+                app:layout_constraintEnd_toStartOf="@id/tvDistance"
+                app:layout_constraintStart_toEndOf="@id/btnBack"
+                app:layout_constraintTop_toTopOf="parent">
 
-            <TextView
-                android:id="@+id/tvChatTitle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:text="Nombre"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintStart_toEndOf="@id/tvHeaderAvatar" />
+                <FrameLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp">
 
-            <TextView
-                android:id="@+id/tvStatus"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:text="Conectando P2P..."
-                android:textColor="@color/primary_color"
-                android:textSize="12sp"
-                app:layout_constraintTop_toBottomOf="@id/tvChatTitle"
-                app:layout_constraintStart_toStartOf="@id/tvChatTitle" />
+                    <TextView
+                        android:id="@+id/tvHeaderAvatar"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/circle_background"
+                        android:backgroundTint="@color/input_bg"
+                        android:gravity="center"
+                        android:text="👤"
+                        android:textSize="20sp" />
+
+                    <ImageView
+                        android:id="@+id/ivHeaderAvatar"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/circle_background"
+                        android:scaleType="centerCrop"
+                        android:clipToOutline="true"
+                        android:visibility="gone"/>
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvChatTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Nombre"
+                        android:textColor="@color/text_primary"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Conectando P2P..."
+                        android:textColor="@color/primary_color"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/tvDistance"

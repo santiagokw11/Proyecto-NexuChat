@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="24dp"
+    app:cardCornerRadius="24dp"
+    app:cardBackgroundColor="@color/surface_card"
+    app:cardElevation="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Eliminar Mensaje"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="¿Deseas eliminar este mensaje para ti? Los otros nodos aún podrían verlo."
+            android:textColor="@color/text_secondary"
+            android:textAlignment="center"
+            android:layout_marginBottom="24dp"/>
+
+        <Button
+            android:id="@+id/btnDeleteMsg"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="🗑 Eliminar para mí"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#F44336"
+            style="@style/Widget.Material3.Button.UnelevatedButton"
+            app:cornerRadius="16dp"
+            android:layout_marginBottom="8dp"/>
+
+        <Button
+            android:id="@+id/btnCancelDelete"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Cancelar"
+            android:textColor="@color/text_secondary"
+            android:backgroundTint="@android:color/transparent"
+            style="@style/Widget.Material3.Button.TextButton"/>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

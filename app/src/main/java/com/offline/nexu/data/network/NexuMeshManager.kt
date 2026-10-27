@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
+import com.offline.nexu.ui.home.P2PManager
+import java.util.Collections
 
 class NexuMeshManager(private val context: Context, private val nickname: String) {
 
@@ -39,9 +41,12 @@ class NexuMeshManager(private val context: Context, private val nickname: String
                     }
                 }
             }
+            P2PManager.payloadCallback.onPayloadReceived(endpointId, payload)
         }
 
-        override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {}
+        override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
+            P2PManager.payloadCallback.onPayloadTransferUpdate(endpointId, update)
+        }
     }
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
@@ -53,6 +58,7 @@ class NexuMeshManager(private val context: Context, private val nickname: String
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
             if (result.status.isSuccess) {
                 Log.d("NexuMesh", "Conectado al nodo: $endpointId")
+                connectedEndpoints.add(endpointId)
                 // Iniciamos la prueba de latencia al conectarnos
                 medirLatencia(endpointId)
             }
@@ -60,6 +66,7 @@ class NexuMeshManager(private val context: Context, private val nickname: String
 
         override fun onDisconnected(endpointId: String) {
             Log.d("NexuMesh", "Desconectado del nodo: $endpointId")
+            connectedEndpoints.remove(endpointId)
         }
     }
 
@@ -75,6 +82,15 @@ class NexuMeshManager(private val context: Context, private val nickname: String
             }
             override fun onEndpointLost(endpointId: String) {}
         }, discoveryOptions)
+    }
+
+    fun setVisibilidadRadar(isVisible: Boolean) {
+        if (!isVisible) {
+            connectionsClient.stopAdvertising()
+            connectionsClient.stopDiscovery()
+        } else {
+            iniciarModoWalkieTalkie()
+        }
     }
 
     fun enviarDatos(endpointId: String, mensaje: String) {
@@ -107,5 +123,41 @@ class NexuMeshManager(private val context: Context, private val nickname: String
         connectionsClient.stopAllEndpoints()
         connectionsClient.stopAdvertising()
         connectionsClient.stopDiscovery()
+    }
+
+    companion object {
+        val connectedEndpoints: MutableSet<String> = Collections.synchronizedSet(HashSet())
+
+        fun getMeshPayloadCallback(context: Context): PayloadCallback {
+            return P2PManager.payloadCallback
+        }
+
+        fun aceptarConexionPendiente(context: Context, endpointId: String) {
+            Nearby.getConnectionsClient(context).acceptConnection(endpointId, getMeshPayloadCallback(context))
+        }
+
+        fun rechazarConexionPendiente(context: Context, endpointId: String) {
+            Nearby.getConnectionsClient(context).rejectConnection(endpointId)
+        }
+
+        fun enviarMensajeMesh(context: Context, senderId: String, senderName: String, target: String, msgId: Long, message: String) {
+            val payload = Payload.fromBytes(message.toByteArray(Charsets.UTF_8))
+            val client = Nearby.getConnectionsClient(context)
+            if (connectedEndpoints.contains(target)) {
+                client.sendPayload(target, payload)
+            } else {
+                connectedEndpoints.forEach { ep ->
+                    client.sendPayload(ep, payload)
+                }
+            }
+        }
+
+        fun enviarMensajeGrupoMesh(context: Context, senderId: String, senderName: String, groupId: String, eventId: Long, message: String) {
+            val payload = Payload.fromBytes(message.toByteArray(Charsets.UTF_8))
+            val client = Nearby.getConnectionsClient(context)
+            connectedEndpoints.forEach { ep ->
+                client.sendPayload(ep, payload)
+            }
+        }
     }
 }

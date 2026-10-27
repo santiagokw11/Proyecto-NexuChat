@@ -1,12 +1,14 @@
 package com.offline.nexu.ui.home
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import androidx.annotation.ColorInt
 import kotlin.math.pow
 import kotlin.math.sqrt
 import kotlin.random.Random
@@ -15,18 +17,14 @@ class RadarView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    // Pulso animado
-    private val paintScan = Paint().apply {
-        color = Color.parseColor("#4400F0FF") // Cyan semi-transparente
+    private val paintScanFill = Paint().apply {
         style = Paint.Style.FILL
         isAntiAlias = true
     }
 
-    // Línea del pulso
     private val paintScanBorder = Paint().apply {
-        color = Color.parseColor("#00F0FF")
         style = Paint.Style.STROKE
-        strokeWidth = 2f
+        strokeWidth = 3f
         isAntiAlias = true
     }
 
@@ -36,6 +34,7 @@ class RadarView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
         isAntiAlias = true
     }
+
     private val paintEmoji = Paint().apply {
         textSize = 70f
         textAlign = Paint.Align.CENTER
@@ -47,27 +46,37 @@ class RadarView @JvmOverloads constructor(
     private var centerY = 0f
     private var pulseRadius = 0f
 
-    data class UserPoint(val name: String, val emoji: String, val x: Float, val y: Float)
+    // Soporte para Bitmap añadido
+    data class UserPoint(val name: String, val emoji: String, val avatar: Bitmap?, val x: Float, val y: Float)
     private val users = mutableMapOf<String, UserPoint>()
 
     var onUserClick: ((String, String) -> Unit)? = null
 
-    fun addUser(endpointId: String, name: String, emoji: String) {
+    fun setAuraColor(@ColorInt colorInt: Int) {
+        paintScanBorder.color = colorInt
+        val r = Color.red(colorInt)
+        val g = Color.green(colorInt)
+        val b = Color.blue(colorInt)
+        paintScanFill.color = Color.argb(64, r, g, b)
+        invalidate()
+    }
+
+    // Actualizado para recibir el Bitmap opcional
+    fun addUser(endpointId: String, name: String, emoji: String, avatar: Bitmap? = null) {
         if (users.containsKey(endpointId)) return
         val angle = Random.nextDouble(0.0, 2 * Math.PI)
         val distance = Random.nextDouble(radius * 0.3, radius * 0.8)
         val px = centerX + (distance * Math.cos(angle)).toFloat()
         val py = centerY + (distance * Math.sin(angle)).toFloat()
-        users[endpointId] = UserPoint(name, emoji, px, py)
-        invalidate() // Forzar redibujado al agregar
+        users[endpointId] = UserPoint(name, emoji, avatar, px, py)
+        invalidate()
     }
 
     fun removeUser(endpointId: String) {
         users.remove(endpointId)
-        invalidate() // Forzar redibujado al quitar
+        invalidate()
     }
 
-    // NUEVO MÉTODO: Limpia todos los usuarios del radar
     fun clearUsers() {
         users.clear()
         invalidate()
@@ -83,19 +92,25 @@ class RadarView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // Dibujar y animar la onda expansiva
-        pulseRadius += 4f // Velocidad de la onda
+        pulseRadius += 4f
         if (pulseRadius > radius) pulseRadius = 0f
 
-        canvas.drawCircle(centerX, centerY, pulseRadius, paintScan)
+        canvas.drawCircle(centerX, centerY, pulseRadius, paintScanFill)
         canvas.drawCircle(centerX, centerY, pulseRadius, paintScanBorder)
 
-        // Dibujar usuarios
         for ((_, user) in users) {
-            canvas.drawText(user.emoji, user.x, user.y, paintEmoji)
-            canvas.drawText(user.name, user.x, user.y + 50f, paintText)
+            if (user.avatar != null) {
+                // Si hay foto, la dibujamos centrada
+                val imgRadius = user.avatar.width / 2f
+                canvas.drawBitmap(user.avatar, user.x - imgRadius, user.y - imgRadius, null)
+                canvas.drawText(user.name, user.x, user.y + imgRadius + 30f, paintText)
+            } else {
+                // Si es un dispositivo nuevo, dibujamos el emoji
+                canvas.drawText(user.emoji, user.x, user.y, paintEmoji)
+                canvas.drawText(user.name, user.x, user.y + 50f, paintText)
+            }
         }
-        invalidate() // Redibujar continuamente para la animación
+        invalidate()
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

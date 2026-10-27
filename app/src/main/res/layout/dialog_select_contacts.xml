@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="@drawable/button_rounded"
+    android:backgroundTint="?android:colorBackground">
+
+    <TextView
+        android:id="@+id/tvDialogTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Seleccionar"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="?android:textColorPrimary"
+        android:layout_marginBottom="16dp"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvDialogContacts"
+        android:layout_width="match_parent"
+        android:layout_height="300dp"
+        android:layout_marginBottom="16dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDialogCancel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cancelar"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_marginEnd="8dp"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDialogConfirm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Confirmar"/>
+    </LinearLayout>
+</LinearLayout>

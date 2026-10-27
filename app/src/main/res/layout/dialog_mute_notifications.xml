@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="32dp"
+    android:layout_marginVertical="16dp"
+    app:cardCornerRadius="24dp"
+    app:cardElevation="12dp"
+    app:cardBackgroundColor="@color/surface_card">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <ImageView
+                android:id="@+id/ivMuteIcon"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@drawable/ic_menu_mute"
+                android:layout_marginEnd="12dp" />
+
+            <TextView
+                android:id="@+id/tvMuteTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Silenciar chat"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="¿Por cuánto tiempo deseas silenciar las notificaciones de este usuario?"
+            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="20dp" />
+
+        <RadioGroup
+            android:id="@+id/rgMuteOptions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp">
+
+            <RadioButton
+                android:id="@+id/rb8Hours"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="8 horas"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:padding="12dp"
+                android:checked="true" />
+
+            <RadioButton
+                android:id="@+id/rb1Week"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="1 semana"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:padding="12dp" />
+
+            <RadioButton
+                android:id="@+id/rbForever"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Para siempre"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:padding="12dp" />
+        </RadioGroup>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="end">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCancelMute"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Cancelar"
+                android:textColor="@color/text_secondary"
+                android:layout_marginEnd="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnConfirmMute"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Silenciar" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

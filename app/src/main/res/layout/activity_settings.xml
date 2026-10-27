@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_main">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toTopOf="@+id/bottom_navigation"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="48dp"
+            android:paddingBottom="40dp">
+
+            <TextView
+                android:id="@+id/tvSettingsTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="24dp"
+                android:layout_marginBottom="32dp"
+                android:text="Configuración"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textSize="34sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/btnMenuPrivacy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/button_rounded"
+                android:backgroundTint="@color/surface_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="18dp"
+                android:elevation="1dp">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_shield"
+                    app:tint="@color/primary_color" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Privacidad y Seguridad Local"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Gestión de contraseñas y accesos"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_forward"
+                    app:tint="?android:attr/textColorSecondary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/btnMenuCustomization"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/button_rounded"
+                android:backgroundTint="@color/surface_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="18dp"
+                android:elevation="1dp">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_brush"
+                    app:tint="@color/primary_color" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Personalización de la Colmena"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Ajusta tu Aura y estilo visual"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_forward"
+                    app:tint="?android:attr/textColorSecondary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/btnMenuTheme"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/button_rounded"
+                android:backgroundTint="@color/surface_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="18dp"
+                android:elevation="1dp">
+
+                <ImageView
+                    android:id="@+id/iconTheme"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_moon_dark"
+                    app:tint="@color/primary_color" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvThemeTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Tema de la Aplicación"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvThemeDesc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Cambiar entre modo claro y oscuro"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_forward"
+                    app:tint="?android:attr/textColorSecondary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/btnMenuOptimization"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/button_rounded"
+                android:backgroundTint="@color/surface_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="18dp"
+                android:elevation="1dp">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_energy_save"
+                    app:tint="@color/primary_color" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Optimización de Energía"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Rendimiento y consumo de batería"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_forward"
+                    app:tint="?android:attr/textColorSecondary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/btnMenuMedia"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/button_rounded"
+                android:backgroundTint="@color/surface_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="18dp"
+                android:elevation="1dp">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_gallery"
+                    app:tint="@color/primary_color" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Gestión de Archivos"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Administra imágenes y descargas"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_forward"
+                    app:tint="?android:attr/textColorSecondary" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginHorizontal="32dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="16dp"
+                android:background="?android:attr/dividerVertical"
+                android:alpha="0.3"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnChangePassword"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:layout_marginHorizontal="24dp"
+                android:text="Cambiar Contraseña"
+                android:textColor="@color/primary_color"
+                android:textSize="15sp"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnLogout"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:layout_marginHorizontal="24dp"
+                android:layout_marginTop="4dp"
+                android:text="Cerrar Sesión"
+                android:textColor="#F44336"
+                android:textSize="15sp"
+                app:cornerRadius="12dp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottom_navigation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/surface_card"
+        app:itemIconTint="@color/primary_color"
+        app:itemTextColor="@color/text_primary"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:menu="@menu/menu_main" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

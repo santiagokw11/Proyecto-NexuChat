@@ -5,12 +5,14 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "messages")
 data class MessageEntity(
-    @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    val msgId: Long,
-    val endpointId: String,
+    @PrimaryKey val msgId: Long,
+    val localUserId: String, // El dueño de este mensaje
+    val endpointId: String,  // Con quién estás hablando
     val text: String,
     val imagePath: String?,
     val isMine: Boolean,
     val status: Int,
-    val timestamp: Long
+    val timestamp: Long,
+    val originalSender: String? = null,
+    val isGroup: Boolean = false
 )

@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/tvCreateGroupTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Crear Grupo"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="24dp"/>
+
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cvGroupAvatar"
+        android:layout_width="110dp"
+        android:layout_height="110dp"
+        android:layout_gravity="center"
+        app:cardCornerRadius="55dp"
+        app:cardElevation="0dp"
+        android:layout_marginBottom="24dp"
+        app:cardBackgroundColor="#F0F0F0">
+
+        <ImageView
+            android:id="@+id/ivGroupAvatar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="center"
+            android:src="@drawable/ic_camera_placeholder"
+            app:tint="#808080"
+            tools:ignore="UseAppTint" />
+    </androidx.cardview.widget.CardView>
+
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="3dp"
+        app:cardBackgroundColor="@color/surface_card"
+        android:layout_marginBottom="24dp">
+
+        <EditText
+            android:id="@+id/etGroupName"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:hint="Nombre del grupo"
+            android:inputType="textCapSentences"
+            android:background="@android:color/transparent"
+            android:gravity="center_vertical"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:textColorHint="@color/text_secondary"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp" />
+    </androidx.cardview.widget.CardView>
+
+    <Switch
+        android:id="@+id/switchEphemeral"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Grupo Efímero (Auto-destrucción)"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp"/>
+
+    <LinearLayout
+        android:id="@+id/llEphemeralSettings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        android:layout_marginBottom="16dp">
+
+        <EditText
+            android:id="@+id/etEphemeralValue"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Cantidad (Ej: 5)"
+            android:inputType="number" />
+
+        <Spinner
+            android:id="@+id/spinnerEphemeralUnit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/theme_divider"
+        android:layout_marginBottom="16dp"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Participantes seleccionados:"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvSelectedContacts"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="16dp"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
+
+    <Button
+        android:id="@+id/btnConfirmCreateGroup"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="Confirmar y Crear Grupo"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:backgroundTint="@color/theme_primary"/>
+
+</LinearLayout>

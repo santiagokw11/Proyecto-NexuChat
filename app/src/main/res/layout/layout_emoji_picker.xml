@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/flEmojiPicker"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?android:colorBackground">
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:fillViewport="true"
+        android:background="?android:colorBackground"
+        android:elevation="4dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp">
+
+            <TextView
+                android:id="@+id/tabSmileys"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp"
+                android:text="😀 Caras"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+
+            <TextView
+                android:id="@+id/tabPeople"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp"
+                android:text="🧑 Personas"
+                android:textColor="@color/text_secondary"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+
+            <TextView
+                android:id="@+id/tabAnimals"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp"
+                android:text="🐻 Animales"
+                android:textColor="@color/text_secondary"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+
+            <TextView
+                android:id="@+id/tabFood"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp"
+                android:text="🍔 Comida"
+                android:textColor="@color/text_secondary"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+
+            <TextView
+                android:id="@+id/tabTravel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp"
+                android:text="✈️ Viajes"
+                android:textColor="@color/text_secondary"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+
+            <TextView
+                android:id="@+id/tabObjects"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp"
+                android:text="💡 Objetos"
+                android:textColor="@color/text_secondary"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+
+            <TextView
+                android:id="@+id/tabSymbols"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp"
+                android:text="❤️ Símbolos"
+                android:textColor="@color/text_secondary"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/theme_divider" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvEmojis"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="8dp"
+        android:clipToPadding="false"
+        android:overScrollMode="never" />
+
+</LinearLayout>

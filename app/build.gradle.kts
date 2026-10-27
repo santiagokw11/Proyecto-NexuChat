@@ -11,8 +11,8 @@ android {
         applicationId = "com.offline.nexu"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 5
+        versionName = "1.40"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -27,7 +27,9 @@ dependencies {
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
     ksp("androidx.room:room-compiler:$room_version")
-
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
     // Material Design
     implementation("com.google.android.material:material:1.11.0")
     implementation(libs.androidx.core.ktx)
@@ -36,7 +38,12 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
-    testImplementation("junit:junit:4.13.2")
+
     // API FUNDAMENTAL PARA EL PROYECTO
     implementation("com.google.android.gms:play-services-nearby:19.0.0")
+
+    // NUEVO: Librerías Media3 (ExoPlayer) para el reproductor de video nativo
+    implementation("androidx.media3:media3-exoplayer:1.3.0")
+    implementation("androidx.media3:media3-ui:1.3.0")
+    implementation("androidx.biometric:biometric:1.1.0")
 }

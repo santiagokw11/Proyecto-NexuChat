@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_main">
+
+    <LinearLayout
+        android:id="@+id/header_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/btnBack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="12dp"
+            android:src="@drawable/ic_volver"
+            app:tint="?android:attr/textColorPrimary" />
+
+        <TextView
+            android:id="@+id/tvCustomizationTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="Personalización"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/header_layout">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="32dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="20dp"
+                android:background="@drawable/button_rounded"
+                android:backgroundTint="@color/surface_card"
+                android:elevation="1dp"
+                android:orientation="vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="24dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Aura de Conexión"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="20dp"
+                    android:text="Elige el color que te representará en la red local y los chats."
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textSize="14sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:baselineAligned="false"
+                    android:layout_marginBottom="16dp">
+
+                    <FrameLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                        <View android:id="@+id/colorPurple" android:layout_width="48dp" android:layout_height="48dp" android:layout_gravity="center" android:alpha="0.3" android:background="@drawable/circle_background" android:backgroundTint="#FF6200EE" />
+                    </FrameLayout>
+
+                    <FrameLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                        <View android:id="@+id/colorIndigo" android:layout_width="48dp" android:layout_height="48dp" android:layout_gravity="center" android:alpha="0.3" android:background="@drawable/circle_background" android:backgroundTint="#3F51B5" />
+                    </FrameLayout>
+
+                    <FrameLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                        <View android:id="@+id/colorBlue" android:layout_width="48dp" android:layout_height="48dp" android:layout_gravity="center" android:alpha="0.3" android:background="@drawable/circle_background" android:backgroundTint="#2196F3" />
+                    </FrameLayout>
+
+                    <FrameLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                        <View android:id="@+id/colorCyan" android:layout_width="48dp" android:layout_height="48dp" android:layout_gravity="center" android:alpha="0.3" android:background="@drawable/circle_background" android:backgroundTint="#00BCD4" />
+                    </FrameLayout>
+
+                    <FrameLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                        <View android:id="@+id/colorTeal" android:layout_width="48dp" android:layout_height="48dp" android:layout_gravity="center" android:alpha="0.3" android:background="@drawable/circle_background" android:backgroundTint="#009688" />
+                    </FrameLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:baselineAligned="false">
+
+                    <FrameLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                        <View android:id="@+id/colorGreen" android:layout_width="48dp" android:layout_height="48dp" android:layout_gravity="center" android:alpha="0.3" android:background="@drawable/circle_background" android:backgroundTint="#4CAF50" />
+                    </FrameLayout>
+
+                    <FrameLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                        <View android:id="@+id/colorAmber" android:layout_width="48dp" android:layout_height="48dp" android:layout_gravity="center" android:alpha="0.3" android:background="@drawable/circle_background" android:backgroundTint="#FFC107" />
+                    </FrameLayout>
+
+                    <FrameLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                        <View android:id="@+id/colorOrange" android:layout_width="48dp" android:layout_height="48dp" android:layout_gravity="center" android:alpha="0.3" android:background="@drawable/circle_background" android:backgroundTint="#FF9800" />
+                    </FrameLayout>
+
+                    <FrameLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                        <View android:id="@+id/colorRed" android:layout_width="48dp" android:layout_height="48dp" android:layout_gravity="center" android:alpha="0.3" android:background="@drawable/circle_background" android:backgroundTint="#F44336" />
+                    </FrameLayout>
+
+                    <FrameLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                        <View android:id="@+id/colorPink" android:layout_width="48dp" android:layout_height="48dp" android:layout_gravity="center" android:alpha="0.3" android:background="@drawable/circle_background" android:backgroundTint="#E91E63" />
+                    </FrameLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="20dp"
+                android:background="@drawable/button_rounded"
+                android:backgroundTint="@color/surface_card"
+                android:elevation="1dp"
+                android:orientation="vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="24dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Estética de La Colmena"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="16dp"
+                    android:text="Configura la apariencia visual del escáner de dispositivos."
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textSize="14sp" />
+
+                <RadioGroup
+                    android:id="@+id/rgRadarStyle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <RadioButton
+                        android:id="@+id/rbStyle0"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingVertical="12dp"
+                        android:text="Clásico (Pulso simple)"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:buttonTint="@color/primary_color"
+                        android:textSize="16sp" />
+
+                    <RadioButton
+                        android:id="@+id/rbStyle1"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingVertical="12dp"
+                        android:text="Ondas Múltiples (Resonancia)"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:buttonTint="@color/primary_color"
+                        android:textSize="16sp" />
+
+                    <RadioButton
+                        android:id="@+id/rbStyle2"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingVertical="12dp"
+                        android:text="Anillos Estáticos"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:buttonTint="@color/primary_color"
+                        android:textSize="16sp" />
+
+                    <RadioButton
+                        android:id="@+id/rbStyle3"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingVertical="12dp"
+                        android:text="Minimalista (Ahorro visual)"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:buttonTint="@color/primary_color"
+                        android:textSize="16sp" />
+                </RadioGroup>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:background="@drawable/button_rounded"
+                android:backgroundTint="@color/surface_card"
+                android:elevation="1dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="20dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Notificación de Proximidad"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Alerta cuando un contacto favorito entra en el rango del radar."
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/switchProximity"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    android:thumbTint="@color/primary_color"
+                    android:theme="@style/Widget.AppCompat.CompoundButton.Switch" />
+            </LinearLayout>
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="10dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSaveCustomization"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:layout_marginHorizontal="24dp"
+                android:text="Guardar Cambios"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/primary_color"
+                app:cornerRadius="12dp" />
+
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

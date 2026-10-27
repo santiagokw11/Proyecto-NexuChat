@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="32dp"
+    android:layout_marginVertical="16dp"
+    app:cardCornerRadius="24dp"
+    app:cardElevation="12dp"
+    app:cardBackgroundColor="@color/surface_card">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <ImageView
+            android:id="@+id/ivConfirmIcon"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:layout_marginBottom="16dp"
+            android:src="@android:drawable/ic_dialog_alert" />
+
+        <TextView
+            android:id="@+id/tvConfirmTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="¿Estás seguro?"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp"/>
+
+        <TextView
+            android:id="@+id/tvConfirmMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="Mensaje descriptivo..."
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:layout_marginBottom="24dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:weightSum="2">
+
+            <Button
+                android:id="@+id/btnCancelAction"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="Cancelar"
+                android:textColor="@color/text_secondary" />
+
+            <Button
+                android:id="@+id/btnConfirmAction"
+                style="@style/Widget.Material3.Button.UnelevatedButton"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="Confirmar"
+                android:textColor="#FFFFFF"
+                app:cornerRadius="12dp" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>
