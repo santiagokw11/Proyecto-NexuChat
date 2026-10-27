@@ -15,6 +15,7 @@ import com.offline.nexu.data.local.db.AppDatabase
 import com.offline.nexu.data.local.db.MessageEntity
 import com.offline.nexu.databinding.ActivityChatsListBinding
 import com.offline.nexu.ui.home.HomeActivity
+import com.offline.nexu.ui.home.P2PManager
 import com.offline.nexu.ui.profile.ProfileActivity
 import com.offline.nexu.utils.ThemeUtils
 import kotlinx.coroutines.Dispatchers
@@ -71,17 +72,37 @@ class ChatsListActivity : AppCompatActivity() {
 
         binding.tvTitle.setTextColor(auraColor)
         findViewById<TextView>(R.id.tvEmptyState)?.setTextColor(auraColor)
+
+        adapter = ChatListAdapter(
+            auraColor = auraColor,
+            onChatClick = { endpointId ->
+                val intent = Intent(this, ChatActivity::class.java)
+                intent.putExtra("EXTRA_USER_NAME", endpointId)
+                startActivity(intent)
+            },
+            onAvatarClick = { endpointId ->
+                val intent = Intent(this, ContactInfoActivity::class.java)
+                intent.putExtra("EXTRA_USER_NAME", endpointId)
+                startActivity(intent)
+            },
+            onChatLongClick = { endpointId ->
+                mostrarOpcionesChat(endpointId)
+            }
+        )
+        binding.rvChats.adapter = adapter
     }
 
     override fun onResume() {
         super.onResume()
         binding.bottomNavigation.selectedItemId = R.id.nav_chats
+        P2PManager.currentActivity = this // <-- REGISTRAMOS LA PANTALLA ACTUAL PARA EL DIALOG
         aplicarColorAura()
         cargarChats()
     }
 
     override fun onPause() {
         super.onPause()
+        if (P2PManager.currentActivity == this) P2PManager.currentActivity = null // <-- LIMPIAMOS
         overridePendingTransition(0, 0)
     }
 
@@ -135,8 +156,14 @@ class ChatsListActivity : AppCompatActivity() {
             lifecycleScope.launch(Dispatchers.IO) {
                 database.nexuDao().deleteAllMessagesFrom(endpointId, myLocalUserId)
                 val dummyMsg = MessageEntity(
-                    System.currentTimeMillis(), myLocalUserId, endpointId,
-                    "🧹 Historial vaciado", null, false, 3, System.currentTimeMillis()
+                    msgId = System.currentTimeMillis(),
+                    localUserId = myLocalUserId,
+                    endpointId = endpointId,
+                    text = "🧹 Historial vaciado",
+                    imagePath = null,
+                    isMine = false,
+                    status = 3,
+                    timestamp = System.currentTimeMillis()
                 )
                 database.nexuDao().insertMessage(dummyMsg)
                 withContext(Dispatchers.Main) { cargarChats() }

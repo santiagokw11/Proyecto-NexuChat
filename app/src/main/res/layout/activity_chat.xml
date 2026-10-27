@@ -105,7 +105,7 @@
                 android:textSize="12sp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"/>
+                app:layout_constraintBottom_toBottomOf="parent" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </androidx.appcompat.widget.Toolbar>
@@ -157,28 +157,37 @@
 
         <ImageButton
             android:id="@+id/btnAttach"
-            android:layout_width="48dp"
+            android:layout_width="36dp"
             android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/bg_attachment_icon"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
 
+        <ImageButton
+            android:id="@+id/btnNudge"
+            android:layout_width="36dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_lock_idle_alarm"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toEndOf="@id/btnAttach" />
+
         <EditText
             android:id="@+id/etMessage"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="4dp"
             android:layout_marginEnd="8dp"
             android:background="@drawable/edittext_rounded"
-            android:hint="Escribe un mensaje..."
+            android:hint="Escribe..."
             android:textColorHint="@color/text_secondary"
             android:textColor="@color/text_primary"
             android:minHeight="48dp"
             android:padding="12dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@id/btnSend"
-            app:layout_constraintStart_toEndOf="@id/btnAttach" />
+            app:layout_constraintStart_toEndOf="@id/btnNudge" />
 
         <ImageButton
             android:id="@+id/btnSend"

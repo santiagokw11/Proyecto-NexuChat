@@ -30,15 +30,12 @@ interface NexuDao {
     @Query("DELETE FROM messages WHERE msgId = :id")
     fun deleteMessageById(id: Long)
 
+    @Query("SELECT * FROM groups WHERE groupId = :groupId LIMIT 1")
+    fun getGroup(groupId: String): GroupEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertGroup(group: GroupEntity)
 
-    @Query("SELECT * FROM groups WHERE groupId = :groupId")
-    fun getGroup(groupId: String): GroupEntity?
-
-    @Query("SELECT * FROM groups")
-    fun getAllGroups(): List<GroupEntity>
-
-    @Query("DELETE FROM groups WHERE groupId = :groupId")
-    fun deleteGroup(groupId: String)
+    @Query("UPDATE groups SET groupAvatar = :path WHERE groupId = :groupId")
+    fun updateGroupAvatar(groupId: String, path: String)
 }

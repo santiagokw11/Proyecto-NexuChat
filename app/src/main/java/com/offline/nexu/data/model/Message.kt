@@ -7,5 +7,6 @@ data class Message(
     val text: String?,
     val imageUrl: Uri?,
     val isMine: Boolean,
-    var status: Int
+    var status: Int,
+    var progress: Int = -1 // <--- NUEVO CAMPO
 )

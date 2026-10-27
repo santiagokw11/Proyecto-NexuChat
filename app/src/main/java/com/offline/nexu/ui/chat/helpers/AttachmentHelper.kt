@@ -43,13 +43,9 @@ object AttachmentHelper {
         val dialog = BottomSheetDialog(context)
         val view = layoutInflater.inflate(R.layout.layout_custom_gallery, null)
         val rvGallery = view.findViewById<RecyclerView>(R.id.rvCustomGallery)
-        val spinnerAlbums = view.findViewById<Spinner>(R.id.spinnerAlbums)
 
         rvGallery.layoutManager = GridLayoutManager(context, 3)
         val mediaLocales = obtenerMediosLocales(context)
-
-        val albums = listOf("Todos") + mediaLocales.map { it.album }.distinct().sorted()
-        spinnerAlbums.adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, albums)
 
         val adapter = CustomGalleryAdapter(context, mediaLocales) { uri ->
             onUriSelected(uri)
@@ -57,14 +53,6 @@ object AttachmentHelper {
         }
         rvGallery.adapter = adapter
 
-        spinnerAlbums.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val selectedAlbum = albums[position]
-                if (selectedAlbum == "Todos") adapter.updateData(mediaLocales)
-                else adapter.updateData(mediaLocales.filter { it.album == selectedAlbum })
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-        }
         dialog.setContentView(view)
         dialog.show()
     }

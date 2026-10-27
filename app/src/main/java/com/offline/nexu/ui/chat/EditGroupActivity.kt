@@ -497,7 +497,7 @@ class EditGroupActivity : AppCompatActivity() {
 
             val isOnline = !isMe && (
                     P2PManager.connectedNames.containsValue(memberId) ||
-                            NexuMeshManager.connectedEndpoints.contains(memberId)
+                            P2PManager.connectedEndpoints.contains(memberId)
                     )
 
             holder.vOnlineDot.visibility = if (isOnline) View.VISIBLE else View.INVISIBLE
@@ -520,7 +520,4 @@ class EditGroupActivity : AppCompatActivity() {
 
         override fun getItemCount() = members.size
     }
-}
-
-fun com.offline.nexu.data.local.db.NexuDao.updateGroupAvatar(groupId: String, path: String) {
 }

@@ -119,7 +119,6 @@ class SettingsActivity : AppCompatActivity() {
                 R.id.nav_radar -> navigateTo(HomeActivity::class.java)
                 R.id.nav_chats -> navigateTo(ChatsListActivity::class.java)
                 R.id.nav_profile -> navigateTo(ProfileActivity::class.java)
-                R.id.nav_settings -> true
                 else -> false
             }
         }
@@ -136,7 +135,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         overridePendingTransition(0, 0)
-        bottomNavigation.selectedItemId = R.id.nav_settings
+        bottomNavigation.selectedItemId = R.id.nav_profile
 
         // Actualizar el icono de tema (Sol/Luna) dinámicamente al regresar
         actualizarIconoTema()

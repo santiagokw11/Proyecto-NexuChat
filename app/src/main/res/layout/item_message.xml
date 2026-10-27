@@ -58,6 +58,21 @@
                 android:scaleType="centerCrop" />
         </androidx.cardview.widget.CardView>
 
+        <ProgressBar
+            android:id="@+id/progressBarSent"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="160dp"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:max="100"
+            android:elevation="5dp"
+            android:progressTint="#FFFFFF"
+            android:progressBackgroundTint="#80FFFFFF"
+            app:layout_constraintTop_toTopOf="@id/cvImageSent"
+            app:layout_constraintBottom_toBottomOf="@id/cvImageSent"
+            app:layout_constraintStart_toStartOf="@id/cvImageSent"
+            app:layout_constraintEnd_toEndOf="@id/cvImageSent" />
+
         <TextView
             android:id="@+id/tvTextSent"
             android:layout_width="wrap_content"
@@ -137,6 +152,19 @@
                 android:minWidth="260dp"
                 android:scaleType="centerCrop" />
         </androidx.cardview.widget.CardView>
+
+        <ProgressBar
+            android:id="@+id/progressBarReceived"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="160dp"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:max="100"
+            android:elevation="5dp"
+            app:layout_constraintTop_toTopOf="@id/cvImageReceived"
+            app:layout_constraintBottom_toBottomOf="@id/cvImageReceived"
+            app:layout_constraintStart_toStartOf="@id/cvImageReceived"
+            app:layout_constraintEnd_toEndOf="@id/cvImageReceived" />
 
         <TextView
             android:id="@+id/tvTextReceived"

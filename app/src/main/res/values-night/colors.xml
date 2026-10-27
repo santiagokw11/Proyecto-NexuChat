@@ -13,4 +13,8 @@
     <color name="input_bg">#151A28</color>
     <color name="input_border">#37474F</color>
     <color name="button_bg">#00F0FF</color>
-    <color name="button_text">#000000</color> </resources>
+    <color name="button_text">#000000</color>
+
+    <color name="theme_primary">#00F0FF</color>
+    <color name="theme_divider">#37474F</color>
+</resources>

@@ -30,6 +30,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
+import com.offline.nexu.ConnectionService
 import com.offline.nexu.R
 import com.offline.nexu.data.local.Prefs
 import com.offline.nexu.data.local.db.AppDatabase
@@ -57,6 +58,9 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var database: AppDatabase
     private lateinit var myLocalUserId: String
 
+    // Cierre forzoso de pop-ups
+    private var activeDialog: android.app.Dialog? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityHomeBinding.inflate(layoutInflater)
@@ -66,6 +70,14 @@ class HomeActivity : AppCompatActivity() {
         myLocalUserId = Prefs(this).getUserProfile().id
 
         cargarPerfilUsuario()
+
+        // Iniciar el servicio en primer plano para mantener la conexión
+        val serviceIntent = Intent(this, ConnectionService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
 
         binding.fabReturnChat.setOnClickListener {
             val endpointActivo = P2PManager.currentEndpointId
@@ -297,6 +309,9 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun sugerirReconexion(endpointId: String, nombre: String, emoji: String, bitmap: Bitmap?) {
+        // Asegurarse de cerrar el anterior si existiera uno suelto
+        activeDialog?.dismiss()
+
         val dialog = android.app.Dialog(this)
         dialog.setContentView(R.layout.dialog_reconnect)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
@@ -304,7 +319,6 @@ class HomeActivity : AppCompatActivity() {
         dialog.findViewById<TextView>(R.id.tvReconnectEmoji).text = emoji
         dialog.findViewById<TextView>(R.id.tvReconnectMessage).text = "Se ha detectado a $nombre en la colmena.\n¿Deseas restablecer la conexión P2P?"
 
-        // Coloreamos el título y el botón con tu Aura
         val auraColor = ThemeUtils.getAuraColor(this)
         dialog.findViewById<TextView>(R.id.tvReconnectTitle).setTextColor(auraColor)
         dialog.findViewById<Button>(R.id.btnReconectar).backgroundTintList = ColorStateList.valueOf(auraColor)
@@ -316,9 +330,10 @@ class HomeActivity : AppCompatActivity() {
 
         dialog.findViewById<Button>(R.id.btnReconectar).setOnClickListener {
             preguntarSiConectar(endpointId, nombre)
-            dialog.dismiss()
+            // No hacemos dismiss manual aquí, se cerrará con onConnectionResult
         }
 
+        activeDialog = dialog
         dialog.show()
 
         val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
@@ -332,6 +347,8 @@ class HomeActivity : AppCompatActivity() {
             .requestConnection(miPerfilP2P, endpointId, connectionLifecycleCallback)
             .addOnFailureListener {
                 binding.tvRadarStatus.text = "No se pudo enviar la solicitud a $nombreDestino"
+                activeDialog?.dismiss()
+                activeDialog = null
             }
     }
 
@@ -341,6 +358,9 @@ class HomeActivity : AppCompatActivity() {
             val nombre = if (partes.size > 1) partes[1] else info.endpointName
 
             if (info.isIncomingConnection) {
+                // Cierra cualquier otro diálogo de reconexión pendiente para abrir este
+                activeDialog?.dismiss()
+
                 val dialog = android.app.Dialog(this@HomeActivity)
                 dialog.setContentView(R.layout.dialog_incoming_connection)
                 dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
@@ -355,15 +375,17 @@ class HomeActivity : AppCompatActivity() {
                     P2PManager.currentEndpointId = endpointId
                     P2PManager.currentEndpointName = nombre
                     Nearby.getConnectionsClient(applicationContext).acceptConnection(endpointId, P2PManager.payloadCallback)
-                    dialog.dismiss()
                 }
 
                 btnReject.setOnClickListener {
                     Nearby.getConnectionsClient(applicationContext).rejectConnection(endpointId)
                     dialog.dismiss()
                 }
+
                 dialog.setCancelable(false)
+                activeDialog = dialog
                 dialog.show()
+
             } else {
                 P2PManager.currentEndpointId = endpointId
                 P2PManager.currentEndpointName = nombre
@@ -372,11 +394,15 @@ class HomeActivity : AppCompatActivity() {
         }
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
+            // AQUÍ LA MAGIA: Cuando la conexión se responde, cerramos cualquier diálogo que estuviese abierto
+            activeDialog?.dismiss()
+            activeDialog = null
+
             if (result.status.statusCode == ConnectionsStatusCodes.STATUS_OK) {
                 P2PManager.sendProfileHandshake(endpointId, Prefs(applicationContext).getUserProfile(), applicationContext)
                 irAlChat(endpointId, P2PManager.currentEndpointName ?: "Conectado")
             } else {
-                Toast.makeText(this@HomeActivity, "Conexión rechazada", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@HomeActivity, "Conexión rechazada o fallida", Toast.LENGTH_SHORT).show()
                 binding.tvRadarStatus.text = "Buscando colmena P2P..."
                 P2PManager.currentEndpointId = null
                 P2PManager.currentEndpointName = null
@@ -401,5 +427,6 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        activeDialog?.dismiss()
     }
 }

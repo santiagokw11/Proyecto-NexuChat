@@ -191,7 +191,7 @@ object GroupManager {
             }
 
             if (filePayload != null) {
-                NexuMeshManager.connectedEndpoints.forEach { ep ->
+                P2PManager.connectedEndpoints.forEach { ep ->
                     Nearby.getConnectionsClient(context).sendPayload(ep, filePayload)
                 }
             }

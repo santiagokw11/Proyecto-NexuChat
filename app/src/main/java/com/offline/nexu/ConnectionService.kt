@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
-import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -24,33 +23,20 @@ class ConnectionService : Service() {
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("NexuChat")
             .setContentText("Conexión P2P activa en segundo plano")
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.mipmap.ic_launcher) // Asegúrate de usar tu icono real
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        // Inicia el servicio en primer plano con el tipo específico para Android 14+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // Android 14+ (API 34)
-            startForeground(
-                1,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-            )
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { // Android 10+ (API 29)
-            startForeground(
-                1,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-            )
-        } else {
-            startForeground(1, notification)
-        }
+        // Inicia el servicio en primer plano para que Android no lo mate
+        startForeground(1, notification)
 
-
+        // Aquí puedes inicializar tu lógica de P2PManager si no está iniciada
         return START_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        // Solo aquí se debe limpiar la sesión, cuando el servicio se detiene explícitamente
         P2PManager.clearSession()
     }
 

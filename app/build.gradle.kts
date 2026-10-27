@@ -11,8 +11,8 @@ android {
         applicationId = "com.offline.nexu"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.40"
+        versionCode = 2
+        versionName = "1.10"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -45,5 +45,4 @@ dependencies {
     // NUEVO: Librerías Media3 (ExoPlayer) para el reproductor de video nativo
     implementation("androidx.media3:media3-exoplayer:1.3.0")
     implementation("androidx.media3:media3-ui:1.3.0")
-    implementation("androidx.biometric:biometric:1.1.0")
 }

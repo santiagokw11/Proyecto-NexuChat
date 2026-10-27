@@ -1,89 +1,101 @@
 package com.offline.nexu.ui.home
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
+import com.offline.nexu.ConnectionService
+import com.offline.nexu.R
 import com.offline.nexu.data.local.Prefs
+import com.offline.nexu.data.local.db.AppDatabase
+import com.offline.nexu.data.local.db.MessageEntity
 import com.offline.nexu.data.model.UserProfile
+import com.offline.nexu.ui.chat.ChatActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileOutputStream
 
 object P2PManager {
     var currentEndpointId: String? = null
     var currentEndpointName: String? = null
-    var activeChatIdentifier: String? = null
     var context: Context? = null
+    var currentActivity: android.app.Activity? = null
 
-    val connectedNames = mutableMapOf<String, String>()
+    // Novedad: Saber exactamente qué chat está abierto en la pantalla
+    var activeChatIdentifier: String? = null
 
     var onMessageReceivedListener: ((Long, String, Uri?) -> Unit)? = null
     var onMessageSentListener: ((Long) -> Unit)? = null
     var onAckReceivedListener: ((Long) -> Unit)? = null
     var onDistanceEstimatedListener: ((String) -> Unit)? = null
     var onProfileReceivedListener: ((String, String, String) -> Unit)? = null
+    var onPayloadProgress: ((Long, Int) -> Unit)? = null
 
     val outgoingPayloadsTracker = mutableMapOf<Long, Long>()
     private val incomingFilePayloads = mutableMapOf<Long, Payload>()
-
     private val expectedProfileImages = mutableMapOf<Long, String>()
-    private val expectedChatImages = mutableMapOf<Long, Pair<Long, String>>()
+    private val expectedChatImages = mutableMapOf<Long, Triple<Long, String, String>>()
+
+    val connectedNames = mutableMapOf<String, String>()
+    val connectedEndpoints = mutableSetOf<String>()
 
     fun setExpectedGroupAvatar(payloadId: Long, groupId: String) {
-        expectedProfileImages[payloadId] = groupId
+        expectedChatImages[payloadId] = Triple(System.currentTimeMillis(), "SYS:AVATAR_UPDATE", groupId)
     }
 
     fun clearSession() {
         currentEndpointId = null
         currentEndpointName = null
-        activeChatIdentifier = null
-        connectedNames.clear()
         outgoingPayloadsTracker.clear()
         incomingFilePayloads.clear()
         expectedProfileImages.clear()
         expectedChatImages.clear()
 
         context?.let {
-            try {
-                com.google.android.gms.nearby.Nearby.getConnectionsClient(it).stopAllEndpoints()
-            } catch (e: Exception) {
-                Log.e("NexuHandshake", "Error al detener endpoints", e)
-            }
+            try { Nearby.getConnectionsClient(it).stopAllEndpoints() } catch (e: Exception) {}
         }
     }
 
-    // ARREGLO EXTREMO: Lectura de archivos a prueba de fallos de Android
-    fun sendProfileHandshake(endpointId: String, profile: UserProfile, ctx: Context) {
-        Log.d("NexuHandshake", "Iniciando Handshake para $endpointId. Avatar: ${profile.avatar}")
+    // MAGIA 1: La función que debes llamar al presionar "Cerrar Sesión" en tu app
+    fun cerrarSesionCompleta(ctx: Context) {
+        clearSession()
+        activeChatIdentifier = null
+        try {
+            Nearby.getConnectionsClient(ctx).stopAllEndpoints()
+            Nearby.getConnectionsClient(ctx).stopAdvertising()
+            Nearby.getConnectionsClient(ctx).stopDiscovery()
+            val serviceIntent = Intent(ctx, ConnectionService::class.java)
+            ctx.stopService(serviceIntent)
+        } catch (e: Exception) {}
+    }
 
+    fun sendProfileHandshake(endpointId: String, profile: UserProfile, ctx: Context) {
         if (profile.avatar.startsWith("/") || profile.avatar.startsWith("file://") || profile.avatar.startsWith("content://")) {
             try {
-                val file = if (profile.avatar.startsWith("/")) {
-                    File(profile.avatar)
-                } else {
-                    File(Uri.parse(profile.avatar).path ?: "")
-                }
-
+                val file = if (profile.avatar.startsWith("/")) File(profile.avatar) else File(Uri.parse(profile.avatar).path ?: "")
                 if (file.exists()) {
                     val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
                     val filePayload = Payload.fromFile(pfd)
                     val textPayload = Payload.fromBytes("PROFILE_IMG:${profile.name}:${filePayload.id}".toByteArray(Charsets.UTF_8))
-
-                    com.google.android.gms.nearby.Nearby.getConnectionsClient(ctx).sendPayload(endpointId, textPayload)
-                    com.google.android.gms.nearby.Nearby.getConnectionsClient(ctx).sendPayload(endpointId, filePayload)
-                    Log.d("NexuHandshake", "ÉXITO: Foto cargada y enviada. Payload ID: ${filePayload.id}")
-                } else {
-                    Log.e("NexuHandshake", "ERROR: El archivo de imagen no existe en la ruta.")
+                    Nearby.getConnectionsClient(ctx).sendPayload(endpointId, textPayload)
+                    Nearby.getConnectionsClient(ctx).sendPayload(endpointId, filePayload)
                 }
-            } catch (e: Exception) {
-                Log.e("NexuHandshake", "ERROR CRÍTICO abriendo la foto de perfil", e)
-            }
+            } catch (e: Exception) {}
         } else {
             val textPayload = Payload.fromBytes("PROFILE_EMOJI:${profile.name}:${profile.avatar}".toByteArray(Charsets.UTF_8))
-            com.google.android.gms.nearby.Nearby.getConnectionsClient(ctx).sendPayload(endpointId, textPayload)
-            Log.d("NexuHandshake", "ÉXITO: Emoji enviado correctamente: ${profile.avatar}")
+            Nearby.getConnectionsClient(ctx).sendPayload(endpointId, textPayload)
         }
     }
 
@@ -92,8 +104,8 @@ object P2PManager {
             when (payload.type) {
                 Payload.Type.BYTES -> {
                     val data = String(payload.asBytes()!!, Charsets.UTF_8)
-                    if (data.startsWith("PING:")) {
-                        // ignore
+                    if (data.startsWith("PING:") || data.startsWith("PONG:")) {
+                        // NexuMeshManager
                     } else if (data.startsWith("ACK:")) {
                         val msgId = data.substringAfter("ACK:").toLongOrNull()
                         if (msgId != null) onAckReceivedListener?.invoke(msgId)
@@ -102,103 +114,178 @@ object P2PManager {
                         if (parts.size == 3) {
                             val msgId = parts[1].toLong()
                             val text = parts[2]
-                            onMessageReceivedListener?.invoke(msgId, text, null)
-                            sendAck(endpointId, msgId)
+
+                            if (text.startsWith("SYS:")) {
+                                onMessageReceivedListener?.invoke(msgId, text, null)
+                            } else {
+                                procesarMensajeEntrante(endpointId, msgId, text, null)
+                            }
+                            if (msgId != 0L) sendAck(endpointId, msgId)
                         }
-                    } else if (data.startsWith("IMG:")) {
+                    } else if (data.startsWith("IMG:") || data.startsWith("VID:") || data.startsWith("DOC:")) {
                         val parts = data.split(":", limit = 4)
                         if (parts.size == 4) {
-                            val payloadId = parts[1].toLong()
-                            val msgId = parts[2].toLong()
-                            val text = parts[3]
-                            expectedChatImages[payloadId] = Pair(msgId, text)
+                            expectedChatImages[parts[1].toLong()] = Triple(parts[2].toLong(), parts[3], parts[0])
                         }
                     } else if (data.startsWith("PROFILE_EMOJI:")) {
                         val parts = data.split(":", limit = 3)
-                        if (parts.size == 3) {
-                            val name = parts[1]
-                            val emoji = parts[2]
-                            connectedNames[endpointId] = name
-                            Log.d("NexuHandshake", "Recibido EMOJI de perfil de $name: $emoji")
-                            saveContactProfile(endpointId, name, emoji)
-                        }
+                        if (parts.size == 3) saveContactProfile(endpointId, parts[1], parts[2])
                     } else if (data.startsWith("PROFILE_IMG:")) {
                         val parts = data.split(":", limit = 3)
-                        if (parts.size == 3) {
-                            val name = parts[1]
-                            val payloadId = parts[2].toLong()
-                            connectedNames[endpointId] = name
-                            Log.d("NexuHandshake", "Aviso recibido: Viene la FOTO de $name (Payload ID: $payloadId)")
-                            expectedProfileImages[payloadId] = name
-                        }
+                        if (parts.size == 3) expectedProfileImages[parts[2].toLong()] = parts[1]
                     }
                 }
-                Payload.Type.FILE -> {
-                    Log.d("NexuHandshake", "Recibiendo archivo pesado... Payload ID: ${payload.id}")
-                    incomingFilePayloads[payload.id] = payload
-                }
+                Payload.Type.FILE -> incomingFilePayloads[payload.id] = payload
             }
         }
 
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
-            if (update.status == PayloadTransferUpdate.Status.SUCCESS) {
+            if (update.status == PayloadTransferUpdate.Status.IN_PROGRESS && update.totalBytes > 0) {
+                val progress = ((update.bytesTransferred.toDouble() / update.totalBytes.toDouble()) * 100).toInt()
+                val msgId = outgoingPayloadsTracker[update.payloadId] ?: expectedChatImages[update.payloadId]?.first
+                if (msgId != null) onPayloadProgress?.invoke(msgId, progress)
+            }
+            else if (update.status == PayloadTransferUpdate.Status.SUCCESS) {
                 if (outgoingPayloadsTracker.containsKey(update.payloadId)) {
-                    val msgId = outgoingPayloadsTracker[update.payloadId]!!
-                    onMessageSentListener?.invoke(msgId)
+                    onMessageSentListener?.invoke(outgoingPayloadsTracker[update.payloadId]!!)
                     outgoingPayloadsTracker.remove(update.payloadId)
                 }
-
                 if (expectedProfileImages.containsKey(update.payloadId)) {
                     val name = expectedProfileImages[update.payloadId]!!
                     val filePayload = incomingFilePayloads[update.payloadId]
-                    if (filePayload != null && filePayload.asFile() != null) {
-                        Log.d("NexuHandshake", "¡Descarga de FOTO de $name exitosa! Procesando guardado...")
-                        val uri = renameAndMoveFile(filePayload.asFile()!!.asJavaFile())
-                        if (uri != null) {
-                            Log.d("NexuHandshake", ">> ÉXITO: Foto guardada en caché local: $uri")
-                            saveContactProfile(endpointId, name, uri.toString())
-                        } else {
-                            Log.e("NexuHandshake", ">> ERROR: Falló al mover el archivo a NexuChat/Media/Profiles")
-                        }
-                    } else {
-                        Log.e("NexuHandshake", ">> ERROR: El archivo de imagen llegó nulo o corrupto.")
+                    if (filePayload != null) {
+                        val uri = renameAndMoveFileSafely(filePayload, "PROFILE")
+                        if (uri != null) saveContactProfile(endpointId, name, uri.toString())
                     }
                     expectedProfileImages.remove(update.payloadId)
+                    incomingFilePayloads.remove(update.payloadId)
                 }
-
                 if (expectedChatImages.containsKey(update.payloadId)) {
                     val msgInfo = expectedChatImages[update.payloadId]!!
                     val filePayload = incomingFilePayloads[update.payloadId]
-                    if (filePayload != null && filePayload.asFile() != null) {
-                        val uri = renameAndMoveFile(filePayload.asFile()!!.asJavaFile())
-                        onMessageReceivedListener?.invoke(msgInfo.first, msgInfo.second, uri)
+                    if (filePayload != null) {
+                        val uri = renameAndMoveFileSafely(filePayload, msgInfo.third)
+                        procesarMensajeEntrante(endpointId, msgInfo.first, msgInfo.second, uri)
                         sendAck(endpointId, msgInfo.first)
                     }
                     expectedChatImages.remove(update.payloadId)
+                    incomingFilePayloads.remove(update.payloadId)
                 }
+            } else if (update.status == PayloadTransferUpdate.Status.FAILURE || update.status == PayloadTransferUpdate.Status.CANCELED) {
+                outgoingPayloadsTracker.remove(update.payloadId)
+                expectedProfileImages.remove(update.payloadId)
+                expectedChatImages.remove(update.payloadId)
+                incomingFilePayloads.remove(update.payloadId)
             }
         }
+    }
+
+    // MAGIA 2: Guardado de mensajes blindado. Ocurre siempre, sin importar si el chat está abierto
+    private fun procesarMensajeEntrante(endpointId: String, msgId: Long, text: String, uri: Uri?) {
+        context?.let { ctx ->
+            val prefs = Prefs(ctx)
+            val localUserId = prefs.getUserProfile().id
+            if (localUserId.isEmpty()) return // Ignorar si no hay sesión iniciada
+
+            val senderName = currentEndpointName ?: "Desconocido"
+
+            val entity = MessageEntity(
+                msgId = msgId,
+                localUserId = localUserId,
+                endpointId = senderName,
+                text = text,
+                imagePath = uri?.toString(),
+                isMine = false,
+                status = 0,
+                timestamp = System.currentTimeMillis()
+            )
+
+            // Guardamos el mensaje en BD independientemente de la UI
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    AppDatabase.getDatabase(ctx).nexuDao().insertMessage(entity)
+                } catch (e: Exception) { Log.e("P2P", "Error saving msg", e) }
+            }
+
+            // Si el usuario tiene el chat abierto, notificamos a la pantalla
+            if (activeChatIdentifier == senderName) {
+                onMessageReceivedListener?.invoke(msgId, text, uri)
+            } else {
+                // Si está cerrado, disparamos la notificación Push
+                mostrarNotificacion(ctx, senderName, text)
+            }
+        }
+    }
+
+    private fun mostrarNotificacion(ctx: Context, emisor: String, mensaje: String) {
+        val channelId = "nexu_messages"
+        val notifManager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(channelId, "Mensajes P2P", NotificationManager.IMPORTANCE_HIGH)
+            notifManager.createNotificationChannel(channel)
+        }
+        val intent = Intent(ctx, ChatActivity::class.java).apply {
+            putExtra("EXTRA_USER_NAME", emisor)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(ctx, emisor.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val textoMostrar = if (mensaje.isEmpty()) "📷 Multimedia recibida" else mensaje
+
+        val builder = NotificationCompat.Builder(ctx, channelId)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(emisor)
+            .setContentText(textoMostrar)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+        notifManager.notify(emisor.hashCode(), builder.build())
     }
 
     private fun sendAck(endpointId: String, msgId: Long) {
         context?.let { ctx ->
             val ackPayload = Payload.fromBytes("ACK:$msgId".toByteArray(Charsets.UTF_8))
-            com.google.android.gms.nearby.Nearby.getConnectionsClient(ctx).sendPayload(endpointId, ackPayload)
+            Nearby.getConnectionsClient(ctx).sendPayload(endpointId, ackPayload)
         }
     }
 
-    private fun renameAndMoveFile(tempFile: File?): Uri? {
-        if (tempFile == null || context == null) return null
+    private fun renameAndMoveFileSafely(filePayload: Payload, type: String): Uri? {
+        if (context == null) return null
         try {
-            val mediaDir = File(context!!.getExternalFilesDir(null), "NexuChat/Media/Profiles")
+            val subFolder = when(type) {
+                "VID" -> "NexuChat Videos"
+                "DOC" -> "NexuChat Documents"
+                "PROFILE" -> "Profiles"
+                else -> "NexuChat Images"
+            }
+            val ext = when(type) { "VID" -> ".mp4"; "DOC" -> ".pdf"; else -> ".jpg" }
+            val prefix = when(type) { "VID" -> "VID_"; "DOC" -> "DOC_"; "PROFILE" -> "PROF_"; else -> "IMG_" }
+
+            val mediaDir = File(context!!.getExternalFilesDir(null), "NexuChat/Media/$subFolder")
             if (!mediaDir.exists()) mediaDir.mkdirs()
-            val newFile = File(mediaDir, "IMG_${System.currentTimeMillis()}.jpg")
-            tempFile.copyTo(newFile, overwrite = true)
+            val nomedia = File(mediaDir, ".nomedia")
+            if (!nomedia.exists()) nomedia.createNewFile()
+
+            val newFile = File(mediaDir, "${prefix}${System.currentTimeMillis()}$ext")
+
+            var inputStream: java.io.InputStream? = null
+            val payloadFile = filePayload.asFile()
+
+            if (payloadFile != null) {
+                if (payloadFile.asUri() != null) {
+                    try { inputStream = context!!.contentResolver.openInputStream(payloadFile.asUri()!!) } catch (e: Exception) { }
+                }
+                if (inputStream == null && payloadFile.asParcelFileDescriptor() != null) {
+                    try { inputStream = ParcelFileDescriptor.AutoCloseInputStream(payloadFile.asParcelFileDescriptor()) } catch (e: Exception) { }
+                }
+                if (inputStream == null && payloadFile.asJavaFile() != null) {
+                    try { if (payloadFile.asJavaFile()!!.exists()) inputStream = payloadFile.asJavaFile()!!.inputStream() } catch (e: Exception) { }
+                }
+            }
+            if (inputStream == null) return null
+            inputStream.use { input -> FileOutputStream(newFile).use { output -> input.copyTo(output) } }
             return Uri.fromFile(newFile)
-        } catch (e: Exception) {
-            Log.e("NexuHandshake", "Error guardando archivo", e)
-        }
-        return null
+        } catch (e: Exception) { return null }
     }
 
     private fun saveContactProfile(endpointId: String, name: String, avatarData: String) {
