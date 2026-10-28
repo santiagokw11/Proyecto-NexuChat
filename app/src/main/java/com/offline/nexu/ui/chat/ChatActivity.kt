@@ -1,6 +1,7 @@
 package com.offline.nexu.ui.chat
 
 import android.Manifest
+import android.app.AlertDialog
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -10,6 +11,7 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -19,13 +21,18 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.MediaStore
 import android.text.Editable
+import android.text.InputType
 import android.text.TextWatcher
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.Spinner
+import android.widget.Switch
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -48,6 +55,8 @@ import com.offline.nexu.ui.home.P2PManager
 import com.offline.nexu.data.network.NexuMeshManager
 import com.offline.nexu.utils.ThemeUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -67,9 +76,16 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var myLocalUserId: String
     private lateinit var prefs: Prefs
 
+    private var isGroup: Boolean = false
+    private var groupId: String = ""
+    private var groupExpirationTime: Long? = null
+
     private var isTyping = false
     private val typingHandler = Handler(Looper.getMainLooper())
     private var lastSentNudgeTime = 0L
+
+    private var ephemeralDuration: Long = 0L
+    private val activeMessagesTracker = mutableListOf<Message>()
 
     private val requestGalleryPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         val granted = permissions.entries.all { it.value }
@@ -102,10 +118,8 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun procesarUriSeleccionada(uri: Uri, esDocumento: Boolean = false) {
-        // Carga en segundo plano para evitar LAG
         lifecycleScope.launch(Dispatchers.IO) {
             val localUri = copiarImagenLocal(uri, esDocumento)
-
             withContext(Dispatchers.Main) {
                 if (localUri != null) {
                     selectedImageUri = localUri
@@ -168,7 +182,6 @@ class ChatActivity : AppCompatActivity() {
         return try {
             val inputStream = contentResolver.openInputStream(uri) ?: return null
             val baseMediaDir = externalMediaDirs.firstOrNull() ?: getExternalFilesDir(null)
-
             val isVideo = contentResolver.getType(uri)?.contains("video") == true || uri.toString().endsWith(".mp4")
 
             val subFolder = when {
@@ -209,8 +222,29 @@ class ChatActivity : AppCompatActivity() {
         prefs = Prefs(this)
         myLocalUserId = prefs.getUserProfile().id
         isDebugMode = intent.getBooleanExtra("EXTRA_IS_DEBUG", false)
-        chatIdentifier = intent.getStringExtra("EXTRA_USER_NAME") ?: "Astronauta"
         database = AppDatabase.getDatabase(this)
+
+        isGroup = intent.getBooleanExtra("EXTRA_IS_GROUP", false)
+        if (isGroup) {
+            groupId = intent.getStringExtra("EXTRA_GROUP_ID") ?: ""
+            chatIdentifier = groupId
+            binding.tvChatTitle.text = intent.getStringExtra("EXTRA_GROUP_NAME") ?: "Grupo"
+
+            lifecycleScope.launch(Dispatchers.IO) {
+                val group = database.nexuDao().getGroup(groupId)
+                val avatarStr = group?.groupAvatar ?: "👥"
+                groupExpirationTime = group?.expirationTime
+
+                withContext(Dispatchers.Main) {
+                    cargarAvatarContacto(avatarStr)
+                    actualizarEstadoConexion()
+                }
+            }
+        } else {
+            chatIdentifier = intent.getStringExtra("EXTRA_USER_NAME") ?: "Astronauta"
+            binding.tvChatTitle.text = chatIdentifier
+            cargarAvatarContacto(prefs.getContactAvatar(chatIdentifier))
+        }
 
         auraColor = ThemeUtils.getAuraColor(this)
         binding.btnBack.setColorFilter(auraColor)
@@ -219,16 +253,73 @@ class ChatActivity : AppCompatActivity() {
         binding.btnAttach.setColorFilter(auraColor)
 
         setupRecyclerView()
-        binding.tvChatTitle.text = chatIdentifier
-        cargarAvatarContacto(prefs.getContactAvatar(chatIdentifier))
+        iniciarLimpiezaEfimeros()
 
         NexuMeshManager.distanceUpdateListener = { distancia ->
             runOnUiThread { binding.tvDistance.text = "📍 $distancia" }
         }
 
         binding.llChatHeaderInfo.setOnClickListener {
-            val intent = Intent(this, ContactInfoActivity::class.java).apply { putExtra("EXTRA_USER_NAME", chatIdentifier) }
-            startActivityForResult(intent, 100)
+            if (!isGroup) {
+                val intent = Intent(this, ContactInfoActivity::class.java).apply { putExtra("EXTRA_USER_NAME", chatIdentifier) }
+                startActivityForResult(intent, 100)
+            }
+        }
+
+        binding.ivAddTime.setOnClickListener {
+            val layout = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(60, 40, 60, 20)
+            }
+            val inputLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                weightSum = 2f
+            }
+            val etValue = EditText(this).apply {
+                hint = "Cantidad"
+                inputType = InputType.TYPE_CLASS_NUMBER
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val spinnerUnit = Spinner(this).apply {
+                adapter = ArrayAdapter(this@ChatActivity, android.R.layout.simple_spinner_dropdown_item, arrayOf("Segundos", "Minutos", "Horas", "Días"))
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            inputLayout.addView(etValue)
+            inputLayout.addView(spinnerUnit)
+            layout.addView(inputLayout)
+
+            AlertDialog.Builder(this)
+                .setTitle("Añadir tiempo al grupo")
+                .setView(layout)
+                .setPositiveButton("Agregar") { _, _ ->
+                    val valStr = etValue.text.toString().trim()
+                    val value = valStr.toLongOrNull() ?: 0L
+                    if (value > 0) {
+                        val multiplier = when (spinnerUnit.selectedItemPosition) {
+                            0 -> 1000L
+                            1 -> 60 * 1000L
+                            2 -> 60 * 60 * 1000L
+                            3 -> 24 * 60 * 60 * 1000L
+                            else -> 1000L
+                        }
+                        val addedTime = value * multiplier
+                        groupExpirationTime = groupExpirationTime!! + addedTime
+
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            database.nexuDao().updateGroupExpiration(groupId, groupExpirationTime!!)
+                            val cmd = "SYS:ADD_TIME:$groupId:${groupExpirationTime!!}"
+                            NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, groupId, System.currentTimeMillis(), "TXT:0:$cmd")
+
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@ChatActivity, "Tiempo extra añadido", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        Toast.makeText(this, "Ingresa un valor válido", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("Cancelar", null)
+                .show()
         }
 
         actualizarEstadoConexion()
@@ -236,28 +327,89 @@ class ChatActivity : AppCompatActivity() {
         if (!isDebugMode) {
             P2PManager.context = applicationContext
 
-            // Listener de progreso
             P2PManager.onPayloadProgress = { msgId, progress ->
                 runOnUiThread { adapter.updateProgress(msgId, progress) }
             }
 
-            P2PManager.onMessageReceivedListener = { endpointName, texto, uriImagen ->
+            P2PManager.onMessageReceivedListener = { incomingMsgId, texto, uriImagen ->
                 runOnUiThread {
-                    when (texto) {
-                        "SYS:TYPING:1" -> { binding.tvStatus.text = "Escribiendo... ✍️"; binding.tvStatus.setTextColor(auraColor) }
-                        "SYS:TYPING:0" -> { actualizarEstadoConexion() }
-                        "SYS:NUDGE" -> {
+                    when {
+                        texto.startsWith("SYS:ADD_TIME:") -> {
+                            val parts = texto.split(":", limit = 4)
+                            if (parts.size >= 4) {
+                                val gId = parts[2]
+                                val newTime = parts[3].toLongOrNull() ?: return@runOnUiThread
+                                lifecycleScope.launch(Dispatchers.IO) {
+                                    database.nexuDao().updateGroupExpiration(gId, newTime)
+                                    if (isGroup && groupId == gId) {
+                                        groupExpirationTime = newTime
+                                    }
+                                }
+                            }
+                        }
+                        texto.startsWith("EPH:") -> {
+                            val parts = texto.split(":", limit = 4)
+                            if (parts.size >= 4) {
+                                val msgId = parts[1].toLongOrNull() ?: System.currentTimeMillis()
+                                val duration = parts[2].toLongOrNull() ?: 0L
+                                val content = parts[3]
+                                val expiresAt = if (duration > 0) System.currentTimeMillis() + duration else null
+                                val newMsg = Message(msgId, content, uriImagen, false, 0, progress = 100, originalSender = chatIdentifier, isGroup = false, expiresAt = expiresAt)
+                                adapter.addMessage(newMsg)
+                                activeMessagesTracker.add(newMsg)
+                                binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
+                                guardarMensajeEnBD(msgId, content, uriImagen?.toString(), false, 0, chatIdentifier, expiresAt)
+                                mostrarNotificacionMensaje(chatIdentifier, content)
+                            }
+                        }
+                        texto.startsWith("GRP:") -> {
+                            val parts = texto.split(":", limit = 4)
+                            if (parts.size >= 4 && parts[1] == chatIdentifier) {
+                                val senderId = parts[2]
+                                val content = parts[3]
+                                val msgId = System.currentTimeMillis()
+                                val newMsg = Message(msgId, content, uriImagen, false, 0, progress = 100, originalSender = senderId, isGroup = true)
+                                adapter.addMessage(newMsg)
+                                activeMessagesTracker.add(newMsg)
+                                binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
+                                guardarMensajeEnBD(msgId, content, uriImagen?.toString(), false, 0, senderId, null)
+                                mostrarNotificacionMensaje(chatIdentifier, content)
+                            }
+                        }
+                        texto.startsWith("GRP_EPH:") -> {
+                            val parts = texto.split(":", limit = 5)
+                            if (parts.size >= 5 && parts[1] == chatIdentifier) {
+                                val senderId = parts[2]
+                                val duration = parts[3].toLongOrNull() ?: 0L
+                                val content = parts[4]
+                                val expiresAt = if (duration > 0) System.currentTimeMillis() + duration else null
+                                val msgId = System.currentTimeMillis()
+                                val newMsg = Message(msgId, content, uriImagen, false, 0, progress = 100, originalSender = senderId, isGroup = true, expiresAt = expiresAt)
+                                adapter.addMessage(newMsg)
+                                activeMessagesTracker.add(newMsg)
+                                binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
+                                guardarMensajeEnBD(msgId, content, uriImagen?.toString(), false, 0, senderId, expiresAt)
+                                mostrarNotificacionMensaje(chatIdentifier, content)
+                            }
+                        }
+                        texto == "SYS:TYPING:1" -> { binding.tvStatus.text = "Escribiendo... ✍️"; binding.tvStatus.setTextColor(auraColor) }
+                        texto == "SYS:TYPING:0" -> { actualizarEstadoConexion() }
+                        texto == "SYS:NUDGE" -> {
                             hacerVibrarTelefono()
                             val msgId = System.currentTimeMillis()
-                            adapter.addMessage(Message(msgId, "¡Te ha enviado un zumbido! 📳", null, false, 0))
+                            val newMsg = Message(msgId, "¡Te ha enviado un zumbido! 📳", null, false, 0, originalSender = chatIdentifier, isGroup = isGroup)
+                            adapter.addMessage(newMsg)
+                            activeMessagesTracker.add(newMsg)
                             binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
                         }
                         else -> {
                             actualizarEstadoConexion()
                             val msgId = System.currentTimeMillis()
-                            adapter.addMessage(Message(msgId, texto, uriImagen, false, 0, progress = 100))
+                            val newMsg = Message(msgId, texto, uriImagen, false, 0, progress = 100, originalSender = chatIdentifier, isGroup = false)
+                            adapter.addMessage(newMsg)
+                            activeMessagesTracker.add(newMsg)
                             binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
-                            guardarMensajeEnBD(msgId, texto, uriImagen?.toString(), false, 0)
+                            guardarMensajeEnBD(msgId, texto, uriImagen?.toString(), false, 0, chatIdentifier, null)
                             mostrarNotificacionMensaje(chatIdentifier, texto)
                         }
                     }
@@ -267,7 +419,7 @@ class ChatActivity : AppCompatActivity() {
             P2PManager.onMessageSentListener = { msgId ->
                 runOnUiThread {
                     adapter.updateMessageStatus(msgId, 1)
-                    adapter.updateProgress(msgId, 100) // Oculta barra
+                    adapter.updateProgress(msgId, 100)
                 }
                 actualizarEstadoEnBD(msgId, 1)
             }
@@ -282,6 +434,81 @@ class ChatActivity : AppCompatActivity() {
         binding.btnRemoveImage.setOnClickListener { selectedImageUri = null; binding.cvImagePreview.visibility = View.GONE }
         binding.btnAttach.setOnClickListener { showAttachmentMenu() }
 
+        binding.btnSend.setOnLongClickListener {
+            val layout = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(60, 40, 60, 20)
+            }
+
+            val switchDisable = Switch(this).apply {
+                text = "Desactivar modo efímero"
+                isChecked = ephemeralDuration == 0L
+                setPadding(0, 0, 0, 40)
+            }
+
+            val inputLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                weightSum = 2f
+            }
+
+            val etValue = EditText(this).apply {
+                hint = "Cantidad"
+                inputType = InputType.TYPE_CLASS_NUMBER
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+
+            val spinnerUnit = Spinner(this).apply {
+                adapter = ArrayAdapter(this@ChatActivity, android.R.layout.simple_spinner_dropdown_item, arrayOf("Segundos", "Minutos", "Horas", "Días"))
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+
+            inputLayout.addView(etValue)
+            inputLayout.addView(spinnerUnit)
+
+            layout.addView(switchDisable)
+            layout.addView(inputLayout)
+
+            fun updateInputs() {
+                val disabled = switchDisable.isChecked
+                etValue.isEnabled = !disabled
+                spinnerUnit.isEnabled = !disabled
+            }
+            updateInputs()
+            switchDisable.setOnCheckedChangeListener { _, _ -> updateInputs() }
+
+            AlertDialog.Builder(this)
+                .setTitle("Configurar Mensajes Efímeros")
+                .setView(layout)
+                .setPositiveButton("Guardar") { _, _ ->
+                    if (switchDisable.isChecked) {
+                        ephemeralDuration = 0L
+                        Toast.makeText(this, "Mensajes efímeros desactivados", Toast.LENGTH_SHORT).show()
+                        binding.etMessage.hint = "Escribe un mensaje..."
+                    } else {
+                        val valStr = etValue.text.toString().trim()
+                        val value = valStr.toLongOrNull() ?: 0L
+                        if (value > 0) {
+                            val multiplier = when (spinnerUnit.selectedItemPosition) {
+                                0 -> 1000L
+                                1 -> 60 * 1000L
+                                2 -> 60 * 60 * 1000L
+                                3 -> 24 * 60 * 60 * 1000L
+                                else -> 1000L
+                            }
+                            ephemeralDuration = value * multiplier
+                            val unitStr = spinnerUnit.selectedItem.toString().lowercase()
+                            Toast.makeText(this, "Modo efímero: Desaparecerán en $value $unitStr", Toast.LENGTH_SHORT).show()
+                            binding.etMessage.hint = "Escribe un mensaje efímero (⏳)..."
+                        } else {
+                            Toast.makeText(this, "Ingresa un valor válido mayor a 0", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                .setNegativeButton("Cancelar", null)
+                .show()
+            true
+        }
+
         binding.btnNudge.setOnClickListener {
             val currentTime = System.currentTimeMillis()
             if (currentTime - lastSentNudgeTime < 5000) {
@@ -292,7 +519,9 @@ class ChatActivity : AppCompatActivity() {
             lastSentNudgeTime = currentTime
             val msgId = System.currentTimeMillis()
             enviarPayloadSistema("SYS:NUDGE")
-            adapter.addMessage(Message(msgId, "Enviaste un zumbido 📳", null, true, 0))
+            val newMsg = Message(msgId, "Enviaste un zumbido 📳", null, true, 0, originalSender = myLocalUserId, isGroup = isGroup)
+            adapter.addMessage(newMsg)
+            activeMessagesTracker.add(newMsg)
             binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
         }
 
@@ -300,7 +529,6 @@ class ChatActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                if (P2PManager.currentEndpointId == null) return
                 if (s.isNullOrEmpty() && isTyping) { isTyping = false; enviarPayloadSistema("SYS:TYPING:0") }
                 else if (!s.isNullOrEmpty() && !isTyping) { isTyping = true; enviarPayloadSistema("SYS:TYPING:1") }
             }
@@ -312,9 +540,13 @@ class ChatActivity : AppCompatActivity() {
             if (text.isEmpty() && image == null) return@setOnClickListener
 
             val msgId = System.currentTimeMillis()
-            adapter.addMessage(Message(msgId, text, image, true, 0))
+            val expiresAt = if (ephemeralDuration > 0) System.currentTimeMillis() + ephemeralDuration else null
+
+            val newMsg = Message(msgId, text, image, true, 0, originalSender = myLocalUserId, isGroup = isGroup, expiresAt = expiresAt)
+            adapter.addMessage(newMsg)
+            activeMessagesTracker.add(newMsg)
             binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
-            guardarMensajeEnBD(msgId, text, image?.toString(), true, 0)
+            guardarMensajeEnBD(msgId, text, image?.toString(), true, 0, myLocalUserId, expiresAt)
 
             binding.etMessage.text.clear()
             binding.cvImagePreview.visibility = View.GONE
@@ -323,7 +555,56 @@ class ChatActivity : AppCompatActivity() {
             enviarPayloadSistema("SYS:TYPING:0")
 
             if (isDebugMode) enviarMensajeSimulado(msgId, text, image)
-            else enviarMensajeP2PReal(msgId, text, image)
+            else {
+                if (isGroup) {
+                    val mensajeRaw = if (ephemeralDuration > 0) "GRP_EPH:${chatIdentifier}:${myLocalUserId}:${ephemeralDuration}:$text" else "TXT:$msgId:$text"
+                    NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, groupId, msgId, mensajeRaw)
+                } else {
+                    enviarMensajeP2PReal(msgId, text, image, ephemeralDuration)
+                }
+            }
+        }
+    }
+
+    private fun iniciarLimpiezaEfimeros() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                val now = System.currentTimeMillis()
+                database.nexuDao().deleteExpiredMessages(now)
+                database.nexuDao().deleteMessagesOfExpiredGroups(now)
+                database.nexuDao().deleteExpiredGroups(now)
+
+                withContext(Dispatchers.Main) {
+                    val toRemove = activeMessagesTracker.filter { it.expiresAt != null && it.expiresAt < now }
+                    toRemove.forEach { expiredMsg ->
+                        adapter.removeMessage(expiredMsg.msgId)
+                        activeMessagesTracker.remove(expiredMsg)
+                    }
+
+                    if (isGroup && groupExpirationTime != null) {
+                        val remaining = groupExpirationTime!! - now
+                        if (remaining > 0) {
+                            val s = (remaining / 1000) % 60
+                            val m = (remaining / (1000 * 60)) % 60
+                            val h = (remaining / (1000 * 60 * 60)) % 24
+                            val d = remaining / (1000 * 60 * 60 * 24)
+
+                            val timeStr = when {
+                                d > 0 -> "${d}d ${h}h ${m}m"
+                                h > 0 -> "${h}h ${m}m ${s}s"
+                                else -> "${m}m ${s}s"
+                            }
+                            binding.tvStatus.text = "⏱️ $timeStr"
+                            binding.tvStatus.setTextColor(Color.parseColor("#FF3B30"))
+                            binding.ivAddTime.visibility = View.VISIBLE
+                        } else {
+                            Toast.makeText(this@ChatActivity, "El grupo ha expirado.", Toast.LENGTH_SHORT).show()
+                            finish()
+                        }
+                    }
+                }
+                delay(1000)
+            }
         }
     }
 
@@ -337,11 +618,15 @@ class ChatActivity : AppCompatActivity() {
             val historial = database.nexuDao().getMessagesForUserSync(chatIdentifier, myLocalUserId)
             val pendientes = historial.filter { it.isMine && it.status == 0 }
             withContext(Dispatchers.Main) {
-                if (pendientes.isNotEmpty() && P2PManager.currentEndpointId != null) {
+                if (pendientes.isNotEmpty()) {
                     Toast.makeText(this@ChatActivity, "Enviando ${pendientes.size} en espera", Toast.LENGTH_SHORT).show()
                     pendientes.forEach { msg ->
                         val uri = if (msg.imagePath != null) Uri.parse(msg.imagePath) else null
-                        enviarMensajeP2PReal(msg.msgId, msg.text ?: "", uri)
+                        if (isGroup) {
+                            NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, groupId, msg.msgId, "TXT:${msg.msgId}:${msg.text}")
+                        } else {
+                            enviarMensajeP2PReal(msg.msgId, msg.text, uri, 0L)
+                        }
                     }
                 }
             }
@@ -359,7 +644,16 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // NUEVO: Verificamos silenciamiento antes de notificar
     private fun mostrarNotificacionMensaje(emisor: String, mensaje: String) {
+        val sharedPreferences = getSharedPreferences("NexuPrefs", Context.MODE_PRIVATE)
+        val mutedUntil = sharedPreferences.getLong("muted_until_${myLocalUserId}_${emisor}", 0L)
+
+        // Si está silenciado "Para siempre" (-1) o el tiempo guardado aún no ha expirado, cancelamos.
+        if (mutedUntil == -1L || mutedUntil > System.currentTimeMillis()) {
+            return
+        }
+
         val channelId = "nexu_messages"
         val notifManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -383,8 +677,15 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun actualizarEstadoConexion() {
-        val sharedPreferences = getSharedPreferences("NexuPrefs", Context.MODE_PRIVATE)
+        if (isGroup) {
+            if (groupExpirationTime == null) {
+                binding.tvStatus.text = "Grupo de chat"
+                binding.tvStatus.setTextColor(getColor(R.color.text_primary))
+            }
+            return
+        }
 
+        val sharedPreferences = getSharedPreferences("NexuPrefs", Context.MODE_PRIVATE)
         if (P2PManager.currentEndpointName == chatIdentifier && P2PManager.currentEndpointId != null) {
             binding.tvStatus.text = "En línea 🟢"
             binding.tvStatus.setTextColor(getColor(R.color.text_primary))
@@ -402,11 +703,10 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun enviarPayloadSistema(comando: String) {
-        val endpointId = P2PManager.currentEndpointId ?: return
-        try {
-            val payload = Payload.fromBytes("TXT:0:$comando".toByteArray(Charsets.UTF_8))
-            Nearby.getConnectionsClient(applicationContext).sendPayload(endpointId, payload)
-        } catch (e: Exception) {}
+        if (isGroup) return
+        val msgId = System.currentTimeMillis()
+        val mensajeRaw = "TXT:0:$comando"
+        NexuMeshManager.enviarMensajeMesh(applicationContext, myLocalUserId, chatIdentifier, msgId, mensajeRaw)
     }
 
     private fun cargarAvatarContacto(avatar: String) {
@@ -414,9 +714,14 @@ class ChatActivity : AppCompatActivity() {
             binding.tvHeaderAvatar.visibility = View.GONE
             binding.ivHeaderAvatar.visibility = View.VISIBLE
             try { binding.ivHeaderAvatar.setImageURI(Uri.parse(avatar)) }
-            catch (e: Exception) { binding.tvHeaderAvatar.visibility = View.VISIBLE; binding.ivHeaderAvatar.visibility = View.GONE }
+            catch (e: Exception) {
+                binding.tvHeaderAvatar.visibility = View.VISIBLE
+                binding.ivHeaderAvatar.visibility = View.GONE
+                binding.tvHeaderAvatar.text = "👥"
+            }
         } else {
-            binding.ivHeaderAvatar.visibility = View.GONE; binding.tvHeaderAvatar.visibility = View.VISIBLE
+            binding.ivHeaderAvatar.visibility = View.GONE
+            binding.tvHeaderAvatar.visibility = View.VISIBLE
             binding.tvHeaderAvatar.text = avatar
         }
     }
@@ -430,19 +735,25 @@ class ChatActivity : AppCompatActivity() {
     private fun cargarHistorialDeMensajes() {
         lifecycleScope.launch(Dispatchers.IO) {
             val historial = database.nexuDao().getMessagesForUserSync(chatIdentifier, myLocalUserId)
+            val now = System.currentTimeMillis()
+            val cleanHistory = historial.filter { it.expiresAt == null || it.expiresAt > now }
+
             withContext(Dispatchers.Main) {
                 setupRecyclerView()
-                historial.forEach { entidad ->
+                activeMessagesTracker.clear()
+                cleanHistory.forEach { entidad ->
                     val uri = if (entidad.imagePath.isNullOrEmpty()) null else Uri.parse(entidad.imagePath)
-                    adapter.addMessage(Message(entidad.msgId, entidad.text, uri, entidad.isMine, entidad.status))
+                    val msg = Message(entidad.msgId, entidad.text, uri, entidad.isMine, entidad.status, originalSender = entidad.originalSender, isGroup = entidad.isGroup, expiresAt = entidad.expiresAt)
+                    adapter.addMessage(msg)
+                    activeMessagesTracker.add(msg)
                 }
                 if (adapter.itemCount > 0) binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
             }
         }
     }
 
-    private fun guardarMensajeEnBD(msgId: Long, text: String, imagePath: String?, isMine: Boolean, status: Int) {
-        val entity = MessageEntity(msgId = msgId, localUserId = myLocalUserId, endpointId = chatIdentifier, text = text, imagePath = imagePath, isMine = isMine, status = status, timestamp = System.currentTimeMillis())
+    private fun guardarMensajeEnBD(msgId: Long, text: String, imagePath: String?, isMine: Boolean, status: Int, originalSender: String, expiresAt: Long?) {
+        val entity = MessageEntity(msgId = msgId, localUserId = myLocalUserId, endpointId = chatIdentifier, originalSender = originalSender, isGroup = isGroup, text = text, imagePath = imagePath, isMine = isMine, status = status, timestamp = System.currentTimeMillis(), expiresAt = expiresAt)
         lifecycleScope.launch(Dispatchers.IO) { database.nexuDao().insertMessage(entity) }
     }
 
@@ -474,7 +785,10 @@ class ChatActivity : AppCompatActivity() {
         dialog.setContentView(R.layout.dialog_delete_message)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.findViewById<Button>(R.id.btnDeleteMsg).setOnClickListener {
-            adapter.removeMessage(msgId); lifecycleScope.launch(Dispatchers.IO) { try { database.nexuDao().deleteMessageById(msgId) } catch (e: Exception) {} }; dialog.dismiss()
+            adapter.removeMessage(msgId);
+            activeMessagesTracker.removeAll { it.msgId == msgId }
+            lifecycleScope.launch(Dispatchers.IO) { try { database.nexuDao().deleteMessageById(msgId) } catch (e: Exception) {} };
+            dialog.dismiss()
         }
         dialog.findViewById<Button>(R.id.btnCancelDelete).setOnClickListener { dialog.dismiss() }
         dialog.show()
@@ -485,15 +799,11 @@ class ChatActivity : AppCompatActivity() {
         Handler(Looper.getMainLooper()).postDelayed({ adapter.updateMessageStatus(msgId, 2); actualizarEstadoEnBD(msgId, 2) }, 1500)
     }
 
-    private fun enviarMensajeP2PReal(msgId: Long, text: String, imageUri: Uri?) {
-        val endpointId = P2PManager.currentEndpointId
-        if (endpointId == null) return
-
+    private fun enviarMensajeP2PReal(msgId: Long, text: String, imageUri: Uri?, duration: Long) {
         try {
             if (imageUri != null) {
-                // Al usar "File", Nearby sabe exactamente el totalBytes
+                val endpointId = P2PManager.currentEndpointId ?: return
                 val file = File(imageUri.path!!)
-
                 if (file.exists()) {
                     val filePayload = Payload.fromFile(file)
                     val path = imageUri.toString()
@@ -502,22 +812,18 @@ class ChatActivity : AppCompatActivity() {
                         path.contains("Videos") || path.endsWith(".mp4") || path.contains("VID_") -> "VID"
                         else -> "IMG"
                     }
-
-                    val header = "$headerType:${filePayload.id}:$msgId:$text"
+                    val header = if (duration > 0) "EPH:$msgId:$duration:$text" else "$headerType:${filePayload.id}:$msgId:$text"
                     val textPayload = Payload.fromBytes(header.toByteArray(Charsets.UTF_8))
 
                     P2PManager.outgoingPayloadsTracker[filePayload.id] = msgId
-
-                    // Inicializamos visualmente la barra en 0%
                     adapter.updateProgress(msgId, 0)
 
                     Nearby.getConnectionsClient(applicationContext).sendPayload(endpointId, textPayload)
                     Nearby.getConnectionsClient(applicationContext).sendPayload(endpointId, filePayload)
                 }
             } else if (text.isNotEmpty()) {
-                val payload = Payload.fromBytes("TXT:$msgId:$text".toByteArray(Charsets.UTF_8))
-                P2PManager.outgoingPayloadsTracker[payload.id] = msgId
-                Nearby.getConnectionsClient(applicationContext).sendPayload(endpointId, payload)
+                val mensajeRaw = if (duration > 0) "EPH:$msgId:$duration:$text" else "TXT:$msgId:$text"
+                NexuMeshManager.enviarMensajeMesh(applicationContext, myLocalUserId, chatIdentifier, msgId, mensajeRaw)
             }
         } catch (e: Exception) {
             e.printStackTrace()

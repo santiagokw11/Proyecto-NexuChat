@@ -3,7 +3,6 @@ package com.offline.nexu.utils
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.util.TypedValue
 import com.offline.nexu.data.local.Prefs
 
 object ThemeUtils {
@@ -29,7 +28,7 @@ object ThemeUtils {
     }
 
     fun getSelectableItemBackground(context: Context): Int {
-        val typedValue = TypedValue()
+        val typedValue = android.util.TypedValue()
         context.theme.resolveAttribute(android.R.attr.selectableItemBackground, typedValue, true)
         return typedValue.resourceId
     }

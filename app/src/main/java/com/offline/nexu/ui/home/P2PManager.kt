@@ -18,6 +18,7 @@ import com.offline.nexu.ConnectionService
 import com.offline.nexu.R
 import com.offline.nexu.data.local.Prefs
 import com.offline.nexu.data.local.db.AppDatabase
+import com.offline.nexu.data.local.db.GroupEntity
 import com.offline.nexu.data.local.db.MessageEntity
 import com.offline.nexu.data.model.UserProfile
 import com.offline.nexu.ui.chat.ChatActivity
@@ -33,7 +34,6 @@ object P2PManager {
     var context: Context? = null
     var currentActivity: android.app.Activity? = null
 
-    // Novedad: Saber exactamente qué chat está abierto en la pantalla
     var activeChatIdentifier: String? = null
 
     var onMessageReceivedListener: ((Long, String, Uri?) -> Unit)? = null
@@ -46,13 +46,11 @@ object P2PManager {
     val outgoingPayloadsTracker = mutableMapOf<Long, Long>()
     private val incomingFilePayloads = mutableMapOf<Long, Payload>()
     private val expectedProfileImages = mutableMapOf<Long, String>()
+    private val expectedGroupAvatars = mutableMapOf<Long, String>()
     private val expectedChatImages = mutableMapOf<Long, Triple<Long, String, String>>()
 
-    val connectedNames = mutableMapOf<String, String>()
-    val connectedEndpoints = mutableSetOf<String>()
-
     fun setExpectedGroupAvatar(payloadId: Long, groupId: String) {
-        expectedChatImages[payloadId] = Triple(System.currentTimeMillis(), "SYS:AVATAR_UPDATE", groupId)
+        expectedGroupAvatars[payloadId] = groupId
     }
 
     fun clearSession() {
@@ -61,6 +59,7 @@ object P2PManager {
         outgoingPayloadsTracker.clear()
         incomingFilePayloads.clear()
         expectedProfileImages.clear()
+        expectedGroupAvatars.clear()
         expectedChatImages.clear()
 
         context?.let {
@@ -68,7 +67,6 @@ object P2PManager {
         }
     }
 
-    // MAGIA 1: La función que debes llamar al presionar "Cerrar Sesión" en tu app
     fun cerrarSesionCompleta(ctx: Context) {
         clearSession()
         activeChatIdentifier = null
@@ -115,7 +113,58 @@ object P2PManager {
                             val msgId = parts[1].toLong()
                             val text = parts[2]
 
-                            if (text.startsWith("SYS:")) {
+                            // LÓGICA PARA CREACIÓN Y EDICIÓN DE GRUPOS
+                            if (text.startsWith("SYS:GROUP_CREATE|") || text.startsWith("SYS:GROUP_UPDATE|")) {
+                                val isUpdate = text.startsWith("SYS:GROUP_UPDATE|")
+                                val sysParts = text.split("|")
+                                if (sysParts.size >= 4) {
+                                    val groupId = sysParts[1]
+                                    val groupName = sysParts[2]
+                                    val members = sysParts[3]
+                                    val avatarPayloadId = if (sysParts.size >= 5) sysParts[4].toLongOrNull() else null
+
+                                    context?.let { ctx ->
+                                        val localUserId = Prefs(ctx).getUserProfile().id
+                                        val senderName = currentEndpointName ?: "Sistema"
+
+                                        CoroutineScope(Dispatchers.IO).launch {
+                                            val dao = AppDatabase.getDatabase(ctx).nexuDao()
+                                            val existingGroup = dao.getGroup(groupId)
+
+                                            val group = GroupEntity(
+                                                groupId = groupId,
+                                                groupName = groupName,
+                                                groupAvatar = existingGroup?.groupAvatar, // Mantiene el anterior mientras descarga el nuevo
+                                                adminId = existingGroup?.adminId ?: senderName,
+                                                members = members
+                                            )
+
+                                            if (avatarPayloadId != null && avatarPayloadId != 0L) {
+                                                expectedGroupAvatars[avatarPayloadId] = groupId
+                                            }
+
+                                            dao.insertGroup(group)
+
+                                            val msgText = if (isUpdate) "El grupo ha sido actualizado" else "Te han añadido al grupo '$groupName'"
+
+                                            val dummyMsg = MessageEntity(
+                                                msgId = System.currentTimeMillis(),
+                                                localUserId = localUserId,
+                                                endpointId = groupId,
+                                                originalSender = senderName,
+                                                isGroup = true,
+                                                text = msgText,
+                                                imagePath = null,
+                                                isMine = false,
+                                                status = 3,
+                                                timestamp = System.currentTimeMillis()
+                                            )
+                                            dao.insertMessage(dummyMsg)
+                                            mostrarNotificacion(ctx, groupName, msgText)
+                                        }
+                                    }
+                                }
+                            } else if (text.startsWith("SYS:")) {
                                 onMessageReceivedListener?.invoke(msgId, text, null)
                             } else {
                                 procesarMensajeEntrante(endpointId, msgId, text, null)
@@ -160,6 +209,24 @@ object P2PManager {
                     expectedProfileImages.remove(update.payloadId)
                     incomingFilePayloads.remove(update.payloadId)
                 }
+                if (expectedGroupAvatars.containsKey(update.payloadId)) {
+                    val groupId = expectedGroupAvatars[update.payloadId]!!
+                    val filePayload = incomingFilePayloads[update.payloadId]
+                    if (filePayload != null) {
+                        val uri = renameAndMoveFileSafely(filePayload, "GROUP_AVATAR")
+                        if (uri != null && context != null) {
+                            CoroutineScope(Dispatchers.IO).launch {
+                                val dao = AppDatabase.getDatabase(context!!).nexuDao()
+                                val group = dao.getGroup(groupId)
+                                if (group != null) {
+                                    dao.insertGroup(group.copy(groupAvatar = uri.toString()))
+                                }
+                            }
+                        }
+                    }
+                    expectedGroupAvatars.remove(update.payloadId)
+                    incomingFilePayloads.remove(update.payloadId)
+                }
                 if (expectedChatImages.containsKey(update.payloadId)) {
                     val msgInfo = expectedChatImages[update.payloadId]!!
                     val filePayload = incomingFilePayloads[update.payloadId]
@@ -174,18 +241,18 @@ object P2PManager {
             } else if (update.status == PayloadTransferUpdate.Status.FAILURE || update.status == PayloadTransferUpdate.Status.CANCELED) {
                 outgoingPayloadsTracker.remove(update.payloadId)
                 expectedProfileImages.remove(update.payloadId)
+                expectedGroupAvatars.remove(update.payloadId)
                 expectedChatImages.remove(update.payloadId)
                 incomingFilePayloads.remove(update.payloadId)
             }
         }
     }
 
-    // MAGIA 2: Guardado de mensajes blindado. Ocurre siempre, sin importar si el chat está abierto
     private fun procesarMensajeEntrante(endpointId: String, msgId: Long, text: String, uri: Uri?) {
         context?.let { ctx ->
             val prefs = Prefs(ctx)
             val localUserId = prefs.getUserProfile().id
-            if (localUserId.isEmpty()) return // Ignorar si no hay sesión iniciada
+            if (localUserId.isEmpty()) return
 
             val senderName = currentEndpointName ?: "Desconocido"
 
@@ -193,6 +260,8 @@ object P2PManager {
                 msgId = msgId,
                 localUserId = localUserId,
                 endpointId = senderName,
+                originalSender = senderName,
+                isGroup = false,
                 text = text,
                 imagePath = uri?.toString(),
                 isMine = false,
@@ -200,18 +269,15 @@ object P2PManager {
                 timestamp = System.currentTimeMillis()
             )
 
-            // Guardamos el mensaje en BD independientemente de la UI
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     AppDatabase.getDatabase(ctx).nexuDao().insertMessage(entity)
                 } catch (e: Exception) { Log.e("P2P", "Error saving msg", e) }
             }
 
-            // Si el usuario tiene el chat abierto, notificamos a la pantalla
             if (activeChatIdentifier == senderName) {
                 onMessageReceivedListener?.invoke(msgId, text, uri)
             } else {
-                // Si está cerrado, disparamos la notificación Push
                 mostrarNotificacion(ctx, senderName, text)
             }
         }
@@ -255,11 +321,11 @@ object P2PManager {
             val subFolder = when(type) {
                 "VID" -> "NexuChat Videos"
                 "DOC" -> "NexuChat Documents"
-                "PROFILE" -> "Profiles"
+                "PROFILE", "GROUP_AVATAR" -> "Profiles"
                 else -> "NexuChat Images"
             }
             val ext = when(type) { "VID" -> ".mp4"; "DOC" -> ".pdf"; else -> ".jpg" }
-            val prefix = when(type) { "VID" -> "VID_"; "DOC" -> "DOC_"; "PROFILE" -> "PROF_"; else -> "IMG_" }
+            val prefix = when(type) { "VID" -> "VID_"; "DOC" -> "DOC_"; "PROFILE" -> "PROF_"; "GROUP_AVATAR" -> "GRP_IMG_"; else -> "IMG_" }
 
             val mediaDir = File(context!!.getExternalFilesDir(null), "NexuChat/Media/$subFolder")
             if (!mediaDir.exists()) mediaDir.mkdirs()

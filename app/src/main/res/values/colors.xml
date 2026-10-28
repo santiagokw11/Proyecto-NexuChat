@@ -3,7 +3,10 @@
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
 
-    <color name="primary_color">#00B8D4</color> <color name="secondary_color">#2979FF</color> <color name="background_main">#F0F3F8</color> <color name="surface_card">#FFFFFF</color>
+    <color name="primary_color">#00B8D4</color>
+    <color name="secondary_color">#2979FF</color>
+    <color name="background_main">#F0F3F8</color>
+    <color name="surface_card">#FFFFFF</color>
 
     <color name="text_primary">#1A1A24</color>
     <color name="text_secondary">#6E7381</color>
@@ -13,6 +16,6 @@
     <color name="button_bg">#00B8D4</color>
     <color name="button_text">#FFFFFF</color>
 
-    <color name="theme_primary">#00B8D4</color>
-    <color name="theme_divider">#E0E0E0</color>
+    <color name="theme_primary">#2196F3</color>
+    <color name="theme_divider">#33808080</color>
 </resources>

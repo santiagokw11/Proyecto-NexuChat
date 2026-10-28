@@ -10,14 +10,18 @@ interface NexuDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertMessage(message: MessageEntity)
 
-    // Filtra por el chat Y por el usuario logueado
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertGroup(group: GroupEntity)
+
+    @Query("SELECT * FROM groups WHERE groupId = :groupId LIMIT 1")
+    fun getGroup(groupId: String): GroupEntity?
+
     @Query("SELECT * FROM messages WHERE endpointId = :endpointId AND localUserId = :localUserId ORDER BY timestamp ASC")
     fun getMessagesForUserSync(endpointId: String, localUserId: String): List<MessageEntity>
 
     @Query("UPDATE messages SET status = :newStatus WHERE msgId = :msgId")
     fun updateStatus(msgId: Long, newStatus: Int)
 
-    // Obtiene el último mensaje de cada chat, solo para el usuario logueado
     @Query("SELECT * FROM messages WHERE localUserId = :localUserId AND msgId IN (SELECT MAX(msgId) FROM messages WHERE localUserId = :localUserId GROUP BY endpointId) ORDER BY timestamp DESC")
     fun getRecentChats(localUserId: String): List<MessageEntity>
 
@@ -30,12 +34,19 @@ interface NexuDao {
     @Query("DELETE FROM messages WHERE msgId = :id")
     fun deleteMessageById(id: Long)
 
-    @Query("SELECT * FROM groups WHERE groupId = :groupId LIMIT 1")
-    fun getGroup(groupId: String): GroupEntity?
+    @Query("SELECT EXISTS(SELECT 1 FROM messages WHERE msgId = :msgId LIMIT 1)")
+    fun messageExists(msgId: Long): Boolean
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertGroup(group: GroupEntity)
+    @Query("DELETE FROM messages WHERE expiresAt IS NOT NULL AND expiresAt <= :currentTime")
+    fun deleteExpiredMessages(currentTime: Long)
 
-    @Query("UPDATE groups SET groupAvatar = :path WHERE groupId = :groupId")
-    fun updateGroupAvatar(groupId: String, path: String)
+    @Query("DELETE FROM groups WHERE expirationTime IS NOT NULL AND expirationTime <= :currentTime")
+    fun deleteExpiredGroups(currentTime: Long)
+
+    @Query("DELETE FROM messages WHERE endpointId IN (SELECT groupId FROM groups WHERE expirationTime IS NOT NULL AND expirationTime <= :currentTime)")
+    fun deleteMessagesOfExpiredGroups(currentTime: Long)
+
+    // NUEVO: Permite sumar tiempo de vida al grupo
+    @Query("UPDATE groups SET expirationTime = :newTime WHERE groupId = :groupId")
+    fun updateGroupExpiration(groupId: String, newTime: Long)
 }

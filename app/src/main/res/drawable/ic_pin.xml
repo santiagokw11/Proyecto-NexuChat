@@ -1,17 +1,6 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24"
-    android:tint="?attr/colorControlNormal">
-
-    <group
-        android:pivotX="12"
-        android:pivotY="12"
-        android:rotation="45">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M16,9V4l1,-2H7L8,4v5c-1.12,2.36 -2.97,4.06 -4,5v1h7v8.82l1,1.18l1,-1.18V15h7v-1C18.97,13.06 17.12,11.36 16,9z"/>
-    </group>
-
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M16,12V4H17V2H7V4H8V12L6,14V16H11V22H13V16H18V14L16,12Z"/>
 </vector>

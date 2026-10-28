@@ -7,6 +7,7 @@ import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
@@ -27,9 +28,15 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.gms.nearby.Nearby
+import com.google.android.gms.nearby.connection.Payload
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.offline.nexu.R
-import com.offline.nexu.ui.chat.group.GroupManager
+import com.offline.nexu.data.local.Prefs
+import com.offline.nexu.data.local.db.AppDatabase
+import com.offline.nexu.data.local.db.GroupEntity
+import com.offline.nexu.data.local.db.MessageEntity
+import com.offline.nexu.data.network.NexuMeshManager
 import com.offline.nexu.utils.ThemeUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -39,6 +46,8 @@ import java.io.FileOutputStream
 
 class CreateGroupActivity : AppCompatActivity() {
 
+    private lateinit var database: AppDatabase
+    private lateinit var myLocalUserId: String
     private lateinit var selectedContactsIds: MutableList<String>
     private var selectedImageUri: Uri? = null
     private var auraColor: Int = 0
@@ -53,7 +62,10 @@ class CreateGroupActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_create_group)
 
+        database = AppDatabase.getDatabase(this)
+        myLocalUserId = Prefs(this).getUserProfile().id
         auraColor = ThemeUtils.getAuraColor(this)
+
         val incomingContacts = intent.getStringArrayListExtra("EXTRA_SELECTED_CONTACTS")
         selectedContactsIds = incomingContacts?.toMutableList() ?: mutableListOf()
 
@@ -106,23 +118,16 @@ class CreateGroupActivity : AppCompatActivity() {
                 }
 
                 val multiplier = when (spinnerEphemeralUnit.selectedItemPosition) {
-                    0 -> 1000L; 1 -> 60 * 1000L; 2 -> 60 * 60 * 1000L; 3 -> 24 * 60 * 60 * 1000L; else -> 1000L
+                    0 -> 1000L
+                    1 -> 60 * 1000L
+                    2 -> 60 * 60 * 1000L
+                    3 -> 24 * 60 * 60 * 1000L
+                    else -> 1000L
                 }
                 expirationTime = System.currentTimeMillis() + (value * multiplier)
             }
 
-            // Delegamos la lógica al GroupManager
-            GroupManager.createGroupNetworkCommand(this, groupName, selectedContactsIds, selectedImageUri, expirationTime) { newGroupId ->
-                Toast.makeText(this, "Grupo creado exitosamente", Toast.LENGTH_SHORT).show()
-                val intent = Intent(this, ChatActivity::class.java).apply {
-                    putExtra("EXTRA_IS_GROUP", true)
-                    putExtra("EXTRA_GROUP_ID", newGroupId)
-                    putExtra("EXTRA_GROUP_NAME", groupName)
-                }
-                startActivity(intent)
-                setResult(RESULT_OK)
-                finish()
-            }
+            crearGrupo(groupName, expirationTime)
         }
     }
 
@@ -181,6 +186,7 @@ class CreateGroupActivity : AppCompatActivity() {
                 if (localUri != null) {
                     selectedImageUri = localUri
                     val ivAvatar = findViewById<ImageView>(R.id.ivGroupAvatar)
+
                     ivAvatar.setImageURI(localUri)
                     ivAvatar.scaleType = ImageView.ScaleType.CENTER_CROP
                     ivAvatar.imageTintList = null
@@ -236,6 +242,86 @@ class CreateGroupActivity : AppCompatActivity() {
         } catch (e: Exception) { null }
     }
 
+    private fun crearGrupo(groupName: String, expirationTime: Long?) {
+        val groupId = "GRP_${System.currentTimeMillis()}"
+        val allMembersIds = selectedContactsIds + myLocalUserId
+        val membersString = allMembersIds.joinToString(",")
+
+        val groupEntity = GroupEntity(
+            groupId = groupId,
+            groupName = groupName,
+            groupAvatar = selectedImageUri?.toString(),
+            adminId = myLocalUserId,
+            members = membersString,
+            expirationTime = expirationTime
+        )
+
+        var avatarPayloadId: Long? = null
+        var filePayload: Payload? = null
+        if (selectedImageUri != null) {
+            try {
+                val file = File(selectedImageUri!!.path!!)
+                if (file.exists()) {
+                    val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+                    filePayload = Payload.fromFile(pfd)
+                    avatarPayloadId = filePayload.id
+                }
+            } catch (e: Exception) {}
+        }
+
+        val dummyText = if (expirationTime != null) "Creaste el grupo efímero '$groupName'" else "Creaste el grupo '$groupName'"
+        val dummyMsg = MessageEntity(
+            msgId = System.currentTimeMillis(),
+            localUserId = myLocalUserId,
+            endpointId = groupId,
+            originalSender = myLocalUserId,
+            isGroup = true,
+            text = dummyText,
+            imagePath = null,
+            isMine = true,
+            status = 3,
+            timestamp = System.currentTimeMillis()
+        )
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            database.nexuDao().insertGroup(groupEntity)
+            database.nexuDao().insertMessage(dummyMsg)
+
+            val expStr = expirationTime?.toString() ?: "0"
+            val cmd = "SYS:GROUP_CREATE|$groupId|$groupName|$membersString|${avatarPayloadId ?: ""}|$expStr"
+
+            selectedContactsIds.forEach { memberId ->
+                NexuMeshManager.enviarMensajeMesh(
+                    applicationContext,
+                    myLocalUserId,
+                    memberId,
+                    System.currentTimeMillis(),
+                    "TXT:0:$cmd"
+                )
+            }
+
+            if (filePayload != null) {
+                NexuMeshManager.connectedEndpoints.forEach { ep ->
+                    Nearby.getConnectionsClient(applicationContext).sendPayload(ep, filePayload)
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@CreateGroupActivity, "Grupo creado exitosamente", Toast.LENGTH_SHORT).show()
+                val intent = Intent(this@CreateGroupActivity, ChatActivity::class.java).apply {
+                    putExtra("EXTRA_IS_GROUP", true)
+                    putExtra("EXTRA_GROUP_ID", groupId)
+                    putExtra("EXTRA_GROUP_NAME", groupName)
+                }
+                startActivity(intent)
+
+                // NUEVO: Le enviamos la señal a SelectMembersActivity para que se destruya
+                setResult(RESULT_OK)
+                finish()
+            }
+        }
+    }
+
     inner class SelectedContactsAdapter(private val contacts: MutableList<String>) : RecyclerView.Adapter<SelectedContactsAdapter.ViewHolder>() {
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -252,6 +338,7 @@ class CreateGroupActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             holder.tvName.text = contacts[position]
             holder.ivAvatar.setImageResource(R.mipmap.ic_launcher_round)
+
             holder.ivRemove.backgroundTintList = ColorStateList.valueOf(auraColor)
 
             holder.ivRemove.setOnClickListener {

@@ -8,5 +8,8 @@ data class Message(
     val imageUrl: Uri?,
     val isMine: Boolean,
     var status: Int,
-    var progress: Int = -1 // <--- NUEVO CAMPO
+    var progress: Int = -1,
+    val originalSender: String? = null,
+    val isGroup: Boolean = false,
+    val expiresAt: Long? = null // NUEVO
 )

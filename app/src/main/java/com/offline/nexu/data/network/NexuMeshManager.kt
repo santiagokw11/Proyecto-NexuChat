@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
 import com.offline.nexu.ui.home.P2PManager
@@ -25,6 +24,10 @@ class NexuMeshManager(private val context: Context, private val nickname: String
         var payloadCallbackPendiente: PayloadCallback? = null
         var distanceUpdateListener: ((String) -> Unit)? = null
 
+        val connectedEndpoints = mutableSetOf<String>()
+        val connectedNames = mutableMapOf<String, String>()
+        val seenMessagesCache = mutableSetOf<Long>()
+
         fun aceptarConexionPendiente(context: Context, endpointId: String) {
             payloadCallbackPendiente?.let { callback ->
                 Nearby.getConnectionsClient(context).acceptConnection(endpointId, callback)
@@ -35,15 +38,24 @@ class NexuMeshManager(private val context: Context, private val nickname: String
             Nearby.getConnectionsClient(context).rejectConnection(endpointId)
         }
 
-        fun enviarMensajeMesh(context: Context, localUserId: String, localUserName: String, targetName: String, msgId: Long, text: String) {
-            val endpointId = P2PManager.connectedNames.entries.find { it.value == targetName }?.key ?: targetName
-            val payload = Payload.fromBytes("TXT:$msgId:$text".toByteArray(Charsets.UTF_8))
-            Nearby.getConnectionsClient(context).sendPayload(endpointId, payload)
+        fun enviarMensajeMesh(context: Context, senderId: String, targetId: String, msgId: Long, mensajeRaw: String) {
+            seenMessagesCache.add(msgId)
+            val ttl = 4
+            val meshPacket = "MESH|$msgId|$targetId|$senderId|$ttl|$mensajeRaw"
+            val payload = Payload.fromBytes(meshPacket.toByteArray(Charsets.UTF_8))
+
+            connectedEndpoints.forEach { ep ->
+                Nearby.getConnectionsClient(context).sendPayload(ep, payload)
+            }
         }
 
-        fun enviarMensajeGrupoMesh(context: Context, localUserId: String, localUserName: String, groupId: String, msgId: Long, text: String) {
-            val payload = Payload.fromBytes("TXT:$msgId:$text".toByteArray(Charsets.UTF_8))
-            P2PManager.connectedEndpoints.forEach { ep ->
+        fun enviarMensajeGrupoMesh(context: Context, senderId: String, groupId: String, msgId: Long, mensajeRaw: String) {
+            seenMessagesCache.add(msgId)
+            val ttl = 4
+            val meshPacket = "GMESH|$msgId|$groupId|$senderId|$ttl|$mensajeRaw"
+            val payload = Payload.fromBytes(meshPacket.toByteArray(Charsets.UTF_8))
+
+            connectedEndpoints.forEach { ep ->
                 Nearby.getConnectionsClient(context).sendPayload(ep, payload)
             }
         }
@@ -53,18 +65,76 @@ class NexuMeshManager(private val context: Context, private val nickname: String
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             if (payload.type == Payload.Type.BYTES) {
                 val data = String(payload.asBytes()!!, Charsets.UTF_8)
+
                 if (data.startsWith("PING:")) {
                     val originalTime = data.substringAfter("PING:")
-                    enviarDatos(endpointId, "PONG:$originalTime")
+                    enviarDatosRaw(endpointId, "PONG:$originalTime")
                     return
                 } else if (data.startsWith("PONG:")) {
                     val originalTime = data.substringAfter("PONG:").toLongOrNull() ?: return
                     calcularDistanciaAproximada(System.currentTimeMillis() - originalTime)
                     return
                 }
+
+                if (data.startsWith("MESH|")) {
+                    val parts = data.split("|", limit = 6)
+                    if (parts.size >= 6) {
+                        val msgId = parts[1].toLongOrNull() ?: return
+                        val targetId = parts[2]
+                        val senderId = parts[3]
+                        val ttl = parts[4].toIntOrNull() ?: return
+                        val realContent = parts[5]
+
+                        if (seenMessagesCache.contains(msgId)) return
+                        seenMessagesCache.add(msgId)
+
+                        if (targetId == nickname) {
+                            val cleanPayload = Payload.fromBytes(realContent.toByteArray(Charsets.UTF_8))
+                            P2PManager.payloadCallback.onPayloadReceived(senderId, cleanPayload)
+                        } else if (ttl > 0) {
+                            val forwardData = "MESH|$msgId|$targetId|$senderId|${ttl - 1}|$realContent"
+                            val forwardPayload = Payload.fromBytes(forwardData.toByteArray(Charsets.UTF_8))
+                            connectedEndpoints.forEach { ep ->
+                                if (ep != endpointId) {
+                                    connectionsClient.sendPayload(ep, forwardPayload)
+                                }
+                            }
+                        }
+                    }
+                    return
+                }
+
+                if (data.startsWith("GMESH|")) {
+                    val parts = data.split("|", limit = 6)
+                    if (parts.size >= 6) {
+                        val msgId = parts[1].toLongOrNull() ?: return
+                        val groupId = parts[2]
+                        val senderId = parts[3]
+                        val ttl = parts[4].toIntOrNull() ?: return
+                        val realContent = parts[5]
+
+                        if (seenMessagesCache.contains(msgId)) return
+                        seenMessagesCache.add(msgId)
+
+                        val cleanPayload = Payload.fromBytes("GRP:$groupId:$senderId:$realContent".toByteArray(Charsets.UTF_8))
+                        P2PManager.payloadCallback.onPayloadReceived(senderId, cleanPayload)
+
+                        if (ttl > 0) {
+                            val forwardData = "GMESH|$msgId|$groupId|$senderId|${ttl - 1}|$realContent"
+                            val forwardPayload = Payload.fromBytes(forwardData.toByteArray(Charsets.UTF_8))
+                            connectedEndpoints.forEach { ep ->
+                                if (ep != endpointId) {
+                                    connectionsClient.sendPayload(ep, forwardPayload)
+                                }
+                            }
+                        }
+                    }
+                    return
+                }
             }
             P2PManager.payloadCallback.onPayloadReceived(endpointId, payload)
         }
+
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
             P2PManager.payloadCallback.onPayloadTransferUpdate(endpointId, update)
         }
@@ -72,31 +142,30 @@ class NexuMeshManager(private val context: Context, private val nickname: String
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
+            connectedNames[endpointId] = connectionInfo.endpointName
             payloadCallbackPendiente = payloadCallback
-
             val activeActivity = P2PManager.currentActivity
 
             if (P2PManager.currentEndpointName == connectionInfo.endpointName) {
                 connectionsClient.acceptConnection(endpointId, payloadCallback)
-            }
-            // Si la app está abierta PERO no estamos en la ventana de Chat, mostramos un Dialog hermoso
-            else if (activeActivity != null && activeActivity::class.java.simpleName != "ChatActivity") {
+            } else if (activeActivity != null && activeActivity::class.java.simpleName != "ChatActivity") {
                 mostrarDialogoGlobal(activeActivity, endpointId, connectionInfo.endpointName)
-            }
-            // Si estamos fuera de la app o dentro del ChatActivity, mostramos Notificación
-            else {
+            } else {
                 mostrarNotificacionConexion(endpointId, connectionInfo.endpointName)
             }
         }
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
             if (result.status.isSuccess) {
+                connectedEndpoints.add(endpointId)
                 P2PManager.currentEndpointId = endpointId
                 iniciarPingPeriodico(endpointId)
             }
         }
 
         override fun onDisconnected(endpointId: String) {
+            connectedEndpoints.remove(endpointId)
+            connectedNames.remove(endpointId)
             detenerPingPeriodico()
             if (P2PManager.currentEndpointId == endpointId) {
                 P2PManager.currentEndpointId = null
@@ -187,14 +256,14 @@ class NexuMeshManager(private val context: Context, private val nickname: String
         notifManager.notify(notifId, builder.build())
     }
 
-    fun enviarDatos(endpointId: String, mensaje: String) {
+    fun enviarDatosRaw(endpointId: String, mensaje: String) {
         val payload = Payload.fromBytes(mensaje.toByteArray())
         connectionsClient.sendPayload(endpointId, payload)
     }
 
     private fun medirLatencia(endpointId: String) {
         pingStartTime = System.currentTimeMillis()
-        enviarDatos(endpointId, "PING:$pingStartTime")
+        enviarDatosRaw(endpointId, "PING:$pingStartTime")
     }
 
     private fun calcularDistanciaAproximada(latenciaMs: Long) {
@@ -215,5 +284,6 @@ class NexuMeshManager(private val context: Context, private val nickname: String
         connectionsClient.stopAllEndpoints()
         connectionsClient.stopAdvertising()
         connectionsClient.stopDiscovery()
+        connectedEndpoints.clear()
     }
 }

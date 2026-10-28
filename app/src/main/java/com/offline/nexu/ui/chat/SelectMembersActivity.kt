@@ -1,24 +1,22 @@
 package com.offline.nexu.ui.chat
 
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.cardview.widget.CardView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.offline.nexu.R
 import com.offline.nexu.data.local.Prefs
 import com.offline.nexu.data.local.db.AppDatabase
@@ -36,9 +34,10 @@ class SelectMembersActivity : AppCompatActivity() {
     private lateinit var adapter: ContactSelectionAdapter
     private var preselectedUser: String? = null
 
+    // NUEVO: Launcher para saber cuándo se creó el grupo y poder cerrar esta pantalla
     private val createGroupLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
-            finish()
+            finish() // Cierra la lista de miembros para que no aparezca al darle atrás
         }
     }
 
@@ -78,13 +77,11 @@ class SelectMembersActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                if (::adapter.isInitialized) {
-                    adapter.filterList(s.toString())
-                }
+                adapter.filterList(s.toString())
             }
         })
 
-        findViewById<ExtendedFloatingActionButton>(R.id.btnNextStep).setOnClickListener {
+        findViewById<Button>(R.id.btnNextStep).setOnClickListener {
             if (selectedContacts.isEmpty()) {
                 Toast.makeText(this, "Selecciona al menos un participante", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -93,6 +90,7 @@ class SelectMembersActivity : AppCompatActivity() {
             val intent = Intent(this, CreateGroupActivity::class.java).apply {
                 putStringArrayListExtra("EXTRA_SELECTED_CONTACTS", ArrayList(selectedContacts.toList()))
             }
+            // NUEVO: Usamos el launcher en vez de startActivity normal
             createGroupLauncher.launch(intent)
         }
     }
@@ -100,19 +98,12 @@ class SelectMembersActivity : AppCompatActivity() {
     private fun aplicarColorAura() {
         val auraColor = ThemeUtils.getAuraColor(this)
         findViewById<TextView>(R.id.tvSelectMembersTitle).setTextColor(auraColor)
-        findViewById<ExtendedFloatingActionButton>(R.id.btnNextStep).backgroundTintList = ColorStateList.valueOf(auraColor)
+        findViewById<Button>(R.id.btnNextStep).backgroundTintList = android.content.res.ColorStateList.valueOf(auraColor)
     }
 
     private fun actualizarContador() {
         val titleStr = if (selectedContacts.isEmpty()) "Seleccionar participantes" else "Participantes (${selectedContacts.size})"
         findViewById<TextView>(R.id.tvSelectMembersTitle).text = titleStr
-
-        val btnNext = findViewById<ExtendedFloatingActionButton>(R.id.btnNextStep)
-        if (selectedContacts.isEmpty()) {
-            btnNext.shrink()
-        } else {
-            btnNext.extend()
-        }
     }
 
     inner class ContactSelectionAdapter(
@@ -121,13 +112,10 @@ class SelectMembersActivity : AppCompatActivity() {
     ) : RecyclerView.Adapter<ContactSelectionAdapter.ViewHolder>() {
 
         private var filteredContacts: List<String> = contacts
-        private val auraColor = ThemeUtils.getAuraColor(this@SelectMembersActivity)
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val cbSelect: CheckBox = view.findViewById(R.id.cbSelect)
             val tvName: TextView = view.findViewById(R.id.tvContactName)
-            val cvAvatar: CardView = view.findViewById(R.id.cvAvatar)
-            val tvAvatarInitial: TextView = view.findViewById(R.id.tvAvatarInitial)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -138,10 +126,6 @@ class SelectMembersActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val contact = filteredContacts[position]
             holder.tvName.text = contact
-
-            holder.tvAvatarInitial.text = if (contact.isNotEmpty()) contact.take(1).uppercase() else "?"
-            holder.cvAvatar.setCardBackgroundColor(auraColor)
-            holder.cbSelect.buttonTintList = ColorStateList.valueOf(auraColor)
 
             holder.cbSelect.isChecked = selectedContacts.contains(contact)
 

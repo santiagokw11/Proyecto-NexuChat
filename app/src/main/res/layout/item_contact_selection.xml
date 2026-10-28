@@ -4,45 +4,58 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
+    android:padding="12dp"
     android:gravity="center_vertical"
-    android:paddingHorizontal="24dp"
-    android:paddingVertical="12dp"
-    android:background="?attr/selectableItemBackground"
-    android:clickable="true"
-    android:focusable="true">
+    android:background="?android:attr/selectableItemBackground">
 
-    <androidx.cardview.widget.CardView
-        android:id="@+id/cvAvatar"
-        android:layout_width="50dp"
-        android:layout_height="50dp"
-        app:cardCornerRadius="25dp"
-        app:cardElevation="0dp">
+    <FrameLayout
+        android:layout_width="48dp"
+        android:layout_height="48dp">
 
         <TextView
-            android:id="@+id/tvAvatarInitial"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:id="@+id/tvSelectAvatarText"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="center"
             android:gravity="center"
-            android:textColor="@android:color/white"
-            android:textSize="22sp"
-            android:textStyle="bold"/>
-    </androidx.cardview.widget.CardView>
+            android:textSize="20sp"
+            android:background="@drawable/circle_background"
+            android:backgroundTint="?android:colorAccent"
+            android:visibility="gone" />
+
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cvSelectAvatar"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="center"
+            app:cardCornerRadius="22dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="@android:color/transparent"
+            android:visibility="gone">
+            <ImageView
+                android:id="@+id/ivSelectAvatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop" />
+        </androidx.cardview.widget.CardView>
+    </FrameLayout>
 
     <TextView
         android:id="@+id/tvContactName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:text="Nombre Usuario"
+        android:textSize="16sp"
+        android:textColor="?android:textColorPrimary"
         android:layout_marginStart="16dp"
-        android:textColor="?android:attr/textColorPrimary"
-        android:textSize="18sp"
-        android:textStyle="bold"/>
+        android:textStyle="normal"/>
 
-    <com.google.android.material.checkbox.MaterialCheckBox
+    <CheckBox
         android:id="@+id/cbSelect"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:buttonTint="?android:colorAccent"
         android:clickable="false"
         android:focusable="false"/>
-
 </LinearLayout>

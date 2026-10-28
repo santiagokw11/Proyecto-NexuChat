@@ -136,7 +136,7 @@ object GroupManager {
         val groupId = "GRP_${System.currentTimeMillis()}"
 
         // TRADUCCIÓN NOMBRES (MESH FIX)
-        val realMemberNames = selectedContactsIds.map { P2PManager.connectedNames[it] ?: it }
+        val realMemberNames = selectedContactsIds.map { NexuMeshManager.connectedNames[it] ?: it }
         val allMembersIds = realMemberNames + myName
         val membersString = allMembersIds.joinToString(",")
 
@@ -174,7 +174,7 @@ object GroupManager {
             val cmd = "SYS:GROUP_CREATE|$groupId|$groupName|$membersString|${avatarPayloadId ?: ""}|$expStr"
 
             selectedContactsIds.forEachIndexed { index, memberId ->
-                val targetName = P2PManager.connectedNames[memberId] ?: memberId
+                val targetName = NexuMeshManager.connectedNames[memberId] ?: memberId
                 val msgId = System.currentTimeMillis() + index
 
                 // GUARDAR EL COMANDO EN DB PARA GARANTIZAR ENTREGA POR SYNC SI SE DESCONECTAN
@@ -186,12 +186,12 @@ object GroupManager {
                 db.nexuDao().insertMessage(pendingSysMsg)
 
                 // Enviar el comando puro, sin la envoltura TXT:0: que generaba conflictos en la persistencia
-                NexuMeshManager.enviarMensajeMesh(context, myLocalUserId, myName, targetName, msgId, cmd)
+                NexuMeshManager.enviarMensajeMesh(context, myLocalUserId, targetName, msgId, cmd)
                 delay(400)
             }
 
             if (filePayload != null) {
-                P2PManager.connectedEndpoints.forEach { ep ->
+                NexuMeshManager.connectedEndpoints.forEach { ep ->
                     Nearby.getConnectionsClient(context).sendPayload(ep, filePayload)
                 }
             }
@@ -208,7 +208,7 @@ object GroupManager {
             val db = AppDatabase.getDatabase(context)
             val group = db.nexuDao().getGroup(groupId) ?: return@launch
 
-            val targetNuevo = P2PManager.connectedNames[nuevoMiembroName] ?: nuevoMiembroName
+            val targetNuevo = NexuMeshManager.connectedNames[nuevoMiembroName] ?: nuevoMiembroName
             currentMembers.add(targetNuevo)
             val newMembersString = currentMembers.joinToString(",")
             val updatedGroup = group.copy(members = newMembersString)
@@ -224,11 +224,11 @@ object GroupManager {
                 isMine = true, status = 0, timestamp = System.currentTimeMillis()
             )
             db.nexuDao().insertMessage(pendingSysMsgCreate)
-            NexuMeshManager.enviarMensajeMesh(context, myLocalUserId, myName, targetNuevo, msgIdCreate, cmdCreate)
+            NexuMeshManager.enviarMensajeMesh(context, myLocalUserId, targetNuevo, msgIdCreate, cmdCreate)
 
             val cmdUpdate = "SYS:GROUP_UPDATE|$groupId|${group.groupName}|$newMembersString"
             currentMembers.forEachIndexed { index, member ->
-                val targetMember = P2PManager.connectedNames[member] ?: member
+                val targetMember = NexuMeshManager.connectedNames[member] ?: member
                 if (targetMember != myLocalUserId && targetMember != myName && targetMember != targetNuevo) {
                     val msgIdUpdate = System.currentTimeMillis() + 50 + index
                     val pendingSysMsgUpdate = MessageEntity(
@@ -237,13 +237,13 @@ object GroupManager {
                         isMine = true, status = 0, timestamp = System.currentTimeMillis()
                     )
                     db.nexuDao().insertMessage(pendingSysMsgUpdate)
-                    NexuMeshManager.enviarMensajeMesh(context, myLocalUserId, myName, targetMember, msgIdUpdate, cmdUpdate)
+                    NexuMeshManager.enviarMensajeMesh(context, myLocalUserId, targetMember, msgIdUpdate, cmdUpdate)
                 }
             }
 
             val eventText = "$myName añadió a $targetNuevo"
             val eventId = System.currentTimeMillis() + 200
-            NexuMeshManager.enviarMensajeGrupoMesh(context, myLocalUserId, myName, groupId, eventId, "TXT:0:SYS:EVENT:$eventText")
+            NexuMeshManager.enviarMensajeGrupoMesh(context, myLocalUserId, groupId, eventId, "TXT:0:SYS:EVENT:$eventText")
 
             val localMsg = MessageEntity(
                 msgId = System.currentTimeMillis() + 250, localUserId = myLocalUserId, endpointId = groupId,
@@ -264,7 +264,7 @@ object GroupManager {
             val db = AppDatabase.getDatabase(context)
             val group = db.nexuDao().getGroup(groupId) ?: return@launch
 
-            val targetRemover = P2PManager.connectedNames[miembroARemover] ?: miembroARemover
+            val targetRemover = NexuMeshManager.connectedNames[miembroARemover] ?: miembroARemover
             currentMembers.remove(targetRemover)
 
             val newMembersString = currentMembers.joinToString(",")
@@ -273,12 +273,12 @@ object GroupManager {
 
             val eventText = "$myName eliminó a $targetRemover"
             val eventId = System.currentTimeMillis() + 50
-            NexuMeshManager.enviarMensajeGrupoMesh(context, myLocalUserId, myName, groupId, eventId, "TXT:0:SYS:EVENT:$eventText")
+            NexuMeshManager.enviarMensajeGrupoMesh(context, myLocalUserId, groupId, eventId, "TXT:0:SYS:EVENT:$eventText")
 
             val cmdUpdate = "SYS:GROUP_UPDATE|$groupId|${group.groupName}|$newMembersString"
             val notifyList = currentMembers + targetRemover
             notifyList.forEachIndexed { index, member ->
-                val targetMember = P2PManager.connectedNames[member] ?: member
+                val targetMember = NexuMeshManager.connectedNames[member] ?: member
                 if (targetMember != myLocalUserId && targetMember != myName) {
                     val msgIdUpdate = System.currentTimeMillis() + 100 + index
                     val pendingSysMsgUpdate = MessageEntity(
@@ -287,7 +287,7 @@ object GroupManager {
                         isMine = true, status = 0, timestamp = System.currentTimeMillis()
                     )
                     db.nexuDao().insertMessage(pendingSysMsgUpdate)
-                    NexuMeshManager.enviarMensajeMesh(context, myLocalUserId, myName, targetMember, msgIdUpdate, cmdUpdate)
+                    NexuMeshManager.enviarMensajeMesh(context, myLocalUserId, targetMember, msgIdUpdate, cmdUpdate)
                 }
             }
 
