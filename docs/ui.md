@@ -26,7 +26,9 @@ La aplicación utiliza un flujo centrado en la inmediatez sin intermediarios de 
 ### 3.1. Pantalla de Acceso e Identidad Local (Login)
 Vista inicial para la configuración o ingreso del nodo local sin requerir conexión a internet ni servidores externos.
 
-![Mockup de Login e Identidad Local](docs/images/NexuChat%20login.jpeg)
+![Mockup de Login e Identidad Local](images/NexuChat%20login.jpeg)
+
+![Mockup de Configuración de Identidad](images/NexuChat%20identity%20setup.png)
 
 - **Componentes principales:**
     * Campo de entrada para **Nickname único local**.
@@ -39,20 +41,23 @@ Vista inicial para la configuración o ingreso del nodo local sin requerir conex
 ### 3.2. Radar P2P (Pantalla Principal)
 Centro visual de monitoreo y conectividad mediante señales Bluetooth Low Energy (BLE).
 
-![Mockup de Pantalla de Radar P2P](docs/images/mockup_radar.png)
+![Mockup de Pantalla de Radar P2P](images/NexuChat%20radar.png)
 
 - **Componentes principales:**
     * **Interruptor superior de Estado:** Alternancia entre *Modo Nexo* (visible y emitiendo) y *Modo Aislado* (silencioso/solo recepción).
     * **Radar de Pulso Central:** Ondas concéntricas animadas que representan el rango de alcance (10 a 30 m).
     * **Nodos Detectados:** Iconos flotantes alrededor del radar identificados por su apodo y el color de su Aura.
     * **Acceso rápido al nodo:** Al tocar un nodo se despliega una tarjeta con su rol, distancia estimada y opción de iniciar chat.
+    * **Modo de Pruebas (oculto):** Tocar **5 veces seguidas el centro del radar** activa el *Modo DEBUG*, que detiene el Bluetooth real y muestra un nodo simulado "Robot" 🤖 para probar el chat sin otro dispositivo. Ver [Guía de pruebas](pruebas.md).
 
 ---
 
 ### 3.3. Bandeja de Conversaciones (Chats)
 Lista de canales de comunicación directos y grupales establecidos en la red ad-hoc.
 
-![Mockup de Lista de Chats y Conversación](docs/images/mockup_chats.png)
+![Mockup de Lista de Chats](images/NexuChat%20conversations.png)
+
+![Mockup de Conversación](images/NexuChat%20message%20thread.png)
 
 - **Componentes principales:**
     * **Lista de chats:** Conversaciones activas con indicador de estado (en alcance / fuera de rango).
@@ -65,7 +70,7 @@ Lista de canales de comunicación directos y grupales establecidos en la red ad-
 ### 3.4. Perfil y Ajustes del Nodo
 Panel de personalización y control de recursos del dispositivo.
 
-![Mockup de Pantalla de Perfil](docs/images/mockup_perfil.png)
+![Mockup de Pantalla de Perfil](images/NexuChat%20profile.png)
 
 - **Componentes principales:**
     * **Identificador visual:** Avatar con el aura seleccionada y alias del usuario.
