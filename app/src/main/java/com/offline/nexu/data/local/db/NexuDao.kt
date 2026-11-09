@@ -31,6 +31,15 @@ interface NexuDao {
     @Query("SELECT imagePath FROM messages WHERE endpointId = :endpointId AND localUserId = :localUserId AND imagePath IS NOT NULL AND imagePath != '' ORDER BY timestamp DESC")
     fun getSharedImages(endpointId: String, localUserId: String): List<String>
 
+    @Query("SELECT imagePath FROM messages WHERE localUserId = :localUserId AND imagePath IS NOT NULL AND imagePath != '' ORDER BY timestamp DESC")
+    fun getAllSharedImages(localUserId: String): List<String>
+
+    @Query("SELECT text FROM messages WHERE endpointId = :endpointId AND localUserId = :localUserId AND text LIKE '%http%' ORDER BY timestamp DESC")
+    fun getSharedLinks(endpointId: String, localUserId: String): List<String>
+
+    @Query("SELECT text FROM messages WHERE localUserId = :localUserId AND text LIKE '%http%' ORDER BY timestamp DESC")
+    fun getAllSharedLinks(localUserId: String): List<String>
+
     @Query("DELETE FROM messages WHERE msgId = :id")
     fun deleteMessageById(id: Long)
 
@@ -49,10 +58,12 @@ interface NexuDao {
     @Query("UPDATE groups SET expirationTime = :newTime WHERE groupId = :groupId")
     fun updateGroupExpiration(groupId: String, newTime: Long)
 
-    // NUEVO: Métodos para conteo y lectura de mensajes
     @Query("SELECT COUNT(*) FROM messages WHERE endpointId = :endpointId AND localUserId = :localUserId AND isMine = 0 AND status = 0")
     fun getUnreadCount(endpointId: String, localUserId: String): Int
 
     @Query("UPDATE messages SET status = 3 WHERE endpointId = :endpointId AND localUserId = :localUserId AND isMine = 0 AND status = 0")
     fun markAsRead(endpointId: String, localUserId: String)
+
+    @Query("SELECT COUNT(*) FROM messages WHERE localUserId = :localUserId")
+    fun getTotalMessagesCount(localUserId: String): Int
 }

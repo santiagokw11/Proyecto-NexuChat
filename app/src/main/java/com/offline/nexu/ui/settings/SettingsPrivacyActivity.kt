@@ -98,30 +98,45 @@ class SettingsPrivacyActivity : AppCompatActivity() {
         applyAuraTheme()
     }
 
+    /**
+     * Muestra una alerta de confirmación antes de borrar la base de datos local.
+     */
     private fun mostrarDialogoBorrarHistorial() {
         AlertDialog.Builder(this)
             .setTitle("¿Borrar historial local?")
             .setMessage("Esta acción eliminará todos los mensajes y archivos guardados en tu dispositivo. No afectará a los dispositivos de tus contactos. Esta acción no se puede deshacer.")
             .setPositiveButton("Eliminar Todo") { _, _ ->
+                /* * AQUÍ DEBES LLAMAR A TU DAO O BASE DE DATOS PARA LIMPIAR
+                 * Ejemplo:
+                 * CoroutineScope(Dispatchers.IO).launch {
+                 * AppDatabase.getDatabase(applicationContext).nexuDao().deleteAllMessages()
+                 * }
+                 */
                 Toast.makeText(this, "Historial local eliminado", Toast.LENGTH_LONG).show()
             }
             .setNegativeButton("Cancelar", null)
             .show()
     }
 
+    /**
+     * Pinta todos los íconos, botones y switches con el color del Aura.
+     */
     private fun applyAuraTheme() {
         try {
             val profile = prefs.getUserProfile()
             val colorInt = Color.parseColor(profile.colorHex)
 
+            // Textos y Botón Volver
             findViewById<TextView>(R.id.tvPrivacyTitle)?.setTextColor(colorInt)
             findViewById<ImageView>(R.id.btnBack)?.setColorFilter(colorInt)
 
+            // Íconos de las tarjetas
             findViewById<ImageView>(R.id.iconFingerprint)?.setColorFilter(colorInt)
             findViewById<ImageView>(R.id.iconKeyboard)?.setColorFilter(colorInt)
             findViewById<ImageView>(R.id.iconBlocked)?.setColorFilter(colorInt)
             findViewById<ImageView>(R.id.iconVisibility)?.setColorFilter(colorInt)
 
+            // Estado para los Switches (Aura encendido, Gris apagado)
             val switchStates = arrayOf(
                 intArrayOf(android.R.attr.state_checked),
                 intArrayOf(-android.R.attr.state_checked)
@@ -137,11 +152,14 @@ class SettingsPrivacyActivity : AppCompatActivity() {
 
             switchBiometric.thumbTintList = thumbStateList
             switchBiometric.trackTintList = trackStateList
+
             switchIncognitoKeyboard.thumbTintList = thumbStateList
             switchIncognitoKeyboard.trackTintList = trackStateList
+
             switchRadarVisibility.thumbTintList = thumbStateList
             switchRadarVisibility.trackTintList = trackStateList
 
+            // Botón Guardar
             findViewById<MaterialButton>(R.id.btnSavePrivacy)?.backgroundTintList =
                 ColorStateList.valueOf(colorInt)
 

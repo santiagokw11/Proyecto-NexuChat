@@ -44,6 +44,8 @@ class RadarView @JvmOverloads constructor(
     private var radius = 0f
     private var centerX = 0f
     private var centerY = 0f
+
+    // Variables de animación
     private var pulseRadius = 0f
 
     var isAnimating = true // Control de animación
@@ -63,7 +65,6 @@ class RadarView @JvmOverloads constructor(
     }
 
     fun addUser(endpointId: String, name: String, emoji: String, avatar: Bitmap? = null) {
-        // Evitar duplicados visuales: Si ya existe alguien con este nombre, lo borramos para actualizar su posición
         val existingKey = users.entries.find { it.value.name == name }?.key
         if (existingKey != null) {
             users.remove(existingKey)
@@ -75,11 +76,9 @@ class RadarView @JvmOverloads constructor(
         var validPosition = false
         var attempts = 0
 
-        // Distancias seguras: minDistance evita que se pinten detrás del círculo central
         val minDistance = radius * 0.45
         val maxDistance = radius * 0.85
 
-        // Algoritmo Anti-Colisiones
         while (!validPosition && attempts < 50) {
             val angle = Random.nextDouble(0.0, 2 * Math.PI)
             val distance = Random.nextDouble(minDistance, maxDistance)
@@ -89,7 +88,6 @@ class RadarView @JvmOverloads constructor(
             validPosition = true
             for ((_, user) in users) {
                 val distToOther = sqrt((px - user.x).pow(2) + (py - user.y).pow(2))
-                // Distancia mínima de 140px entre íconos para que no se superpongan
                 if (distToOther < 140f) {
                     validPosition = false
                     break
@@ -122,12 +120,43 @@ class RadarView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        if (isAnimating) {
-            pulseRadius += 4f
-            if (pulseRadius > radius) pulseRadius = 0f
+        val prefs = context.getSharedPreferences("NexuSettings", Context.MODE_PRIVATE)
+        val style = prefs.getInt("radar_style", 0)
 
-            canvas.drawCircle(centerX, centerY, pulseRadius, paintScanFill)
-            canvas.drawCircle(centerX, centerY, pulseRadius, paintScanBorder)
+        if (isAnimating) {
+            when (style) {
+                0 -> {
+                    // Clásico: Pulso Simple
+                    pulseRadius += 4f
+                    if (pulseRadius > radius) pulseRadius = 0f
+                    canvas.drawCircle(centerX, centerY, pulseRadius, paintScanFill)
+                    canvas.drawCircle(centerX, centerY, pulseRadius, paintScanBorder)
+                }
+                1 -> {
+                    // Ondas Múltiples (Resonancia)
+                    pulseRadius += 3f
+                    if (pulseRadius > radius) pulseRadius = 0f
+
+                    val pulseRadius2 = if (pulseRadius > radius / 3) pulseRadius - radius / 3 else 0f
+                    val pulseRadius3 = if (pulseRadius > radius * 2 / 3) pulseRadius - radius * 2 / 3 else 0f
+
+                    canvas.drawCircle(centerX, centerY, pulseRadius, paintScanBorder)
+                    if (pulseRadius2 > 0) canvas.drawCircle(centerX, centerY, pulseRadius2, paintScanBorder)
+                    if (pulseRadius3 > 0) canvas.drawCircle(centerX, centerY, pulseRadius3, paintScanBorder)
+                }
+                2 -> {
+                    // Anillos Estáticos
+                    canvas.drawCircle(centerX, centerY, radius * 0.33f, paintScanBorder)
+                    canvas.drawCircle(centerX, centerY, radius * 0.66f, paintScanBorder)
+                    canvas.drawCircle(centerX, centerY, radius, paintScanBorder)
+                }
+                3 -> {
+                    // Minimalista
+                    pulseRadius += 2f
+                    if (pulseRadius > radius) pulseRadius = 0f
+                    canvas.drawCircle(centerX, centerY, pulseRadius, paintScanBorder) // Sin fill para ser ligero
+                }
+            }
         }
 
         for ((_, user) in users) {

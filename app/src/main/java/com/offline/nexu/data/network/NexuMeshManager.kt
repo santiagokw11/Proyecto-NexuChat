@@ -371,11 +371,21 @@ class NexuMeshManager(private val context: Context, private val nickname: String
             connectionsClient.stopAdvertising()
         } catch (e: Exception) {}
 
-        val options = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
-        connectionsClient.startAdvertising(nickname, SERVICE_ID, connectionLifecycleCallback, options)
+        // 1. LEER LA CONFIGURACIÓN DE PRIVACIDAD DEL USUARIO
+        val sharedPrefs = context.getSharedPreferences("NexuSettings", Context.MODE_PRIVATE)
+        val isRadarHidden = sharedPrefs.getBoolean("radar_hidden", false)
+
+        // 2. MODO FANTASMA: Solo anunciarnos si NO está oculto
+        if (!isRadarHidden) {
+            val options = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
+            connectionsClient.startAdvertising(nickname, SERVICE_ID, connectionLifecycleCallback, options)
+        }
+
+        // 3. SIEMPRE seguir descubriendo (Para que tú sí puedas ver a los demás)
         val discoveryOptions = DiscoveryOptions.Builder().setStrategy(STRATEGY).build()
         connectionsClient.startDiscovery(SERVICE_ID, object : EndpointDiscoveryCallback() {
             override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
+                // Al encontrar a alguien, solicitamos conexión silenciosa para armar la malla
                 connectionsClient.requestConnection(nickname, endpointId, connectionLifecycleCallback)
             }
             override fun onEndpointLost(endpointId: String) {}
@@ -384,9 +394,11 @@ class NexuMeshManager(private val context: Context, private val nickname: String
 
     fun setVisibilidadRadar(visible: Boolean) {
         if (visible) {
+            // El usuario desactivó el Modo Fantasma, volvemos a anunciarnos
             val options = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
             connectionsClient.startAdvertising(nickname, SERVICE_ID, connectionLifecycleCallback, options)
         } else {
+            // El usuario activó el Modo Fantasma, nos volvemos invisibles de inmediato
             connectionsClient.stopAdvertising()
         }
     }

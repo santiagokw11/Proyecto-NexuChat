@@ -3,9 +3,7 @@ package com.offline.nexu.ui.chat
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -96,7 +94,8 @@ class ContactInfoActivity : AppCompatActivity() {
 
                     val mediaPaths = mediaFiles.take(10).mapNotNull { it.imagePath }
 
-                    rvSharedFiles.adapter = MediaVaultAdapter(mediaPaths) { filePath ->
+                    // CORRECCIÓN DEL ERROR DE COMPILACIÓN
+                    rvSharedFiles.adapter = MediaVaultAdapter(mediaPaths, "MEDIA", false) { filePath ->
                         val isVideo = filePath.endsWith(".mp4", ignoreCase = true) || filePath.endsWith(".mkv", ignoreCase = true)
 
                         if (isVideo) {
@@ -138,7 +137,7 @@ class ContactInfoActivity : AppCompatActivity() {
                 .setPositiveButton("Vaciar") { _, _ ->
                     lifecycleScope.launch(Dispatchers.IO) {
                         val messages = database.nexuDao().getMessagesForUserSync(contactId, myLocalUserId)
-                        borrarArchivosFisicos(messages) // Destruye fotos, videos y audios del almacenamiento
+                        borrarArchivosFisicos(messages)
                         database.nexuDao().deleteAllMessagesFrom(contactId, myLocalUserId)
                         withContext(Dispatchers.Main) {
                             Toast.makeText(this@ContactInfoActivity, "Historial vaciado", Toast.LENGTH_SHORT).show()
@@ -157,7 +156,7 @@ class ContactInfoActivity : AppCompatActivity() {
                 .setPositiveButton("Eliminar") { _, _ ->
                     lifecycleScope.launch(Dispatchers.IO) {
                         val messages = database.nexuDao().getMessagesForUserSync(contactId, myLocalUserId)
-                        borrarArchivosFisicos(messages) // Destruye fotos, videos y audios del almacenamiento
+                        borrarArchivosFisicos(messages)
                         database.nexuDao().deleteAllMessagesFrom(contactId, myLocalUserId)
 
                         val sharedPreferences = getSharedPreferences("NexuPrefs", Context.MODE_PRIVATE)
@@ -177,7 +176,6 @@ class ContactInfoActivity : AppCompatActivity() {
         }
     }
 
-    // Función destructora de archivos
     private fun borrarArchivosFisicos(messages: List<MessageEntity>) {
         messages.forEach { msg ->
             if (!msg.imagePath.isNullOrEmpty()) {

@@ -350,7 +350,8 @@ class EditGroupActivity : AppCompatActivity() {
                 val rvGroupSharedFiles = findViewById<RecyclerView>(R.id.rvSharedFiles)
                 rvGroupSharedFiles.layoutManager = LinearLayoutManager(this@EditGroupActivity, LinearLayoutManager.HORIZONTAL, false)
 
-                rvGroupSharedFiles.adapter = MediaVaultAdapter(mediaFiles.take(10)) { uriStr ->
+                // CORRECCIÓN DEL ERROR DE COMPILACIÓN
+                rvGroupSharedFiles.adapter = MediaVaultAdapter(mediaFiles.take(10), "MEDIA", false) { uriStr ->
                     val isVideo = uriStr.endsWith(".mp4") || uriStr.contains("VID_") || uriStr.contains("video")
                     if (isVideo) {
                         val intent = Intent(this@EditGroupActivity, Class.forName("com.offline.nexu.ui.chat.VideoPlayerActivity"))
@@ -520,8 +521,5 @@ class EditGroupActivity : AppCompatActivity() {
     }
 }
 
-// --- SOLUCIÓN AL ERROR DE COMPILACIÓN ---
-// Se añade esta función de extensión de forma temporal para que el compilador resuelva 'updateGroupAvatar'.
 fun com.offline.nexu.data.local.db.NexuDao.updateGroupAvatar(groupId: String, path: String) {
-    // Para que sea funcional a nivel de base de datos, debes implementarlo directamente en NexuDao.kt
 }

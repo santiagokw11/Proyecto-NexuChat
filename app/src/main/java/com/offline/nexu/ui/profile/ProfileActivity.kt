@@ -1,70 +1,49 @@
 package com.offline.nexu.ui.profile
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import com.google.android.gms.nearby.Nearby
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.offline.nexu.R
 import com.offline.nexu.data.local.Prefs
-import com.offline.nexu.data.model.UserProfile
+import com.offline.nexu.data.local.db.AppDatabase
+import com.offline.nexu.ui.chat.ChatsListActivity
 import com.offline.nexu.ui.chat.helpers.AttachmentHelper
+import com.offline.nexu.ui.chat.helpers.EmojiHelper
 import com.offline.nexu.ui.home.HomeActivity
-import com.offline.nexu.ui.home.P2PManager
-import com.offline.nexu.ui.login.LoginActivity
+import com.offline.nexu.ui.settings.SettingsActivity
 import com.offline.nexu.utils.ThemeUtils
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.util.*
+import java.util.concurrent.TimeUnit
 
 class ProfileActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
     private lateinit var avatarImageView: ImageView
     private var selectedAvatarUri: Uri? = null
-    private var currentColorHex: String = "#00BCD4"
 
     private lateinit var tvProfileTitle: TextView
-    private lateinit var viewPurple: View
-    private lateinit var viewBlue: View
-    private lateinit var viewCyan: View
-    private lateinit var viewGreen: View
-    private lateinit var viewOrange: View
-    private lateinit var viewRed: View
-
+    private lateinit var tvTimeUsingApp: TextView
+    private lateinit var tvMessagesProcessed: TextView
     private lateinit var btnSave: Button
     private lateinit var bottomNavigation: BottomNavigationView
-
-    // --- NUEVO: GALERÍA PERSONALIZADA EN VEZ DE GOOGLE PHOTOS ---
-    private val requestGalleryPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-        val granted = permissions.entries.all { it.value }
-        if (granted) {
-            AttachmentHelper.openCustomGallery(this, layoutInflater) { uri -> procesarUriAvatar(uri) }
-        } else {
-            Toast.makeText(this, "Permiso de galería denegado", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun procesarUriAvatar(uri: Uri) {
-        selectedAvatarUri = uri
-        avatarImageView.setImageURI(uri)
-        avatarImageView.clipToOutline = true
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,35 +51,60 @@ class ProfileActivity : AppCompatActivity() {
 
         prefs = Prefs(this)
         val currentProfile = prefs.getUserProfile()
-        currentColorHex = currentProfile.colorHex
 
         tvProfileTitle = findViewById(R.id.tvProfileTitle)
         avatarImageView = findViewById(R.id.etAvatar)
         val etName = findViewById<EditText>(R.id.etName)
-        val etBio = findViewById<EditText>(R.id.etBio)
-        val etRole = findViewById<EditText>(R.id.etRole)
+        val etStatusMessage = findViewById<EditText>(R.id.etStatusMessage)
+
+        // Usamos null safety por si llegaste a eliminar el campo de emoji del XML
+        val etMoodEmoji = findViewById<EditText?>(R.id.etMoodEmoji)
+
+        etMoodEmoji?.isFocusable = false
+        etMoodEmoji?.isClickable = true
+        etMoodEmoji?.setOnClickListener {
+            mostrarDialogoEmojisMood(etMoodEmoji)
+        }
+
+        tvTimeUsingApp = findViewById(R.id.tvTimeUsingApp)
+        tvMessagesProcessed = findViewById(R.id.tvMessagesProcessed)
+
         btnSave = findViewById(R.id.btnSaveProfile)
         bottomNavigation = findViewById(R.id.bottom_navigation)
 
-        viewPurple = findViewById(R.id.colorPurple)
-        viewBlue = findViewById(R.id.colorBlue)
-        viewCyan = findViewById(R.id.colorCyan)
-        viewGreen = findViewById(R.id.colorGreen)
-        viewOrange = findViewById(R.id.colorOrange)
-        viewRed = findViewById(R.id.colorRed)
-
         etName.setText(currentProfile.name)
-        etBio.setText(currentProfile.customAttributes["bio"] ?: "")
-        etRole.setText(currentProfile.customAttributes["rol"] ?: "")
+        etStatusMessage.setText(currentProfile.customAttributes["status_message"] ?: "")
+        etMoodEmoji?.setText(currentProfile.customAttributes["mood_emoji"] ?: "")
 
-        seleccionarColorPorHex(currentColorHex)
+        val createdAt = prefs.getAccountCreatedAt(currentProfile.id)
+        tvTimeUsingApp.text = "Tiempo en la app: ${calculateTimeUsingApp(createdAt)}"
 
-        viewPurple.setOnClickListener { actualizarColorVisual("#FF6200EE", viewPurple) }
-        viewBlue.setOnClickListener { actualizarColorVisual("#2196F3", viewBlue) }
-        viewCyan.setOnClickListener { actualizarColorVisual("#00BCD4", viewCyan) }
-        viewGreen.setOnClickListener { actualizarColorVisual("#4CAF50", viewGreen) }
-        viewOrange.setOnClickListener { actualizarColorVisual("#FF9800", viewOrange) }
-        viewRed.setOnClickListener { actualizarColorVisual("#F44336", viewRed) }
+        // LÓGICA DEL DESPLEGABLE DE ESTADÍSTICAS
+        val btnToggleStats = findViewById<LinearLayout>(R.id.btnToggleStats)
+        val layoutStatsContent = findViewById<LinearLayout>(R.id.layoutStatsContent)
+        val ivStatsArrow = findViewById<ImageView>(R.id.ivStatsArrow)
+
+        btnToggleStats.setOnClickListener {
+            if (layoutStatsContent.visibility == View.GONE) {
+                // Abrir
+                layoutStatsContent.visibility = View.VISIBLE
+                ivStatsArrow.animate().rotation(180f).setDuration(250).start()
+            } else {
+                // Cerrar
+                layoutStatsContent.visibility = View.GONE
+                ivStatsArrow.animate().rotation(0f).setDuration(250).start()
+            }
+        }
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val db = AppDatabase.getDatabase(applicationContext)
+            val msgCount = db.nexuDao().getTotalMessagesCount(currentProfile.id)
+            withContext(Dispatchers.Main) {
+                tvMessagesProcessed.text = "Mensajes procesados: $msgCount"
+            }
+        }
+
+        aplicarColorGlobal(currentProfile.colorHex)
 
         if (currentProfile.avatar.isNotEmpty() && currentProfile.avatar.startsWith("/")) {
             val avatarFile = File(currentProfile.avatar)
@@ -110,13 +114,12 @@ class ProfileActivity : AppCompatActivity() {
             }
         }
 
-        // --- LANZAR GALERÍA PERSONALIZADA ---
+        // Abre tu galería personalizada (Custom Gallery)
         avatarImageView.setOnClickListener {
-            val p = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) arrayOf(Manifest.permission.READ_MEDIA_IMAGES) else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-            if (ContextCompat.checkSelfPermission(this, p[0]) != PackageManager.PERMISSION_GRANTED) {
-                requestGalleryPermissionLauncher.launch(p)
-            } else {
-                AttachmentHelper.openCustomGallery(this, layoutInflater) { uri -> procesarUriAvatar(uri) }
+            AttachmentHelper.openCustomGallery(this, layoutInflater) { uri ->
+                selectedAvatarUri = uri
+                avatarImageView.setImageURI(uri)
+                avatarImageView.clipToOutline = true
             }
         }
 
@@ -131,65 +134,20 @@ class ProfileActivity : AppCompatActivity() {
                 }
             }
 
-            val nuevosAtributos = mapOf(
-                "bio" to etBio.text.toString().trim(),
-                "rol" to etRole.text.toString().trim()
-            )
+            val nuevosAtributos = currentProfile.customAttributes.toMutableMap()
+            nuevosAtributos["status_message"] = etStatusMessage.text.toString().trim()
+            etMoodEmoji?.let {
+                nuevosAtributos["mood_emoji"] = it.text.toString().trim()
+            }
 
-            val newProfile = UserProfile(
-                id = currentProfile.id,
+            val newProfile = currentProfile.copy(
                 name = etName.text.toString().trim(),
                 avatar = finalAvatarPath,
-                colorHex = currentColorHex,
                 customAttributes = nuevosAtributos
             )
 
             prefs.saveUserProfile(newProfile)
-            Toast.makeText(this, "Identidad y aura actualizadas", Toast.LENGTH_SHORT).show()
-        }
-
-        findViewById<Button>(R.id.btnLogout)?.setOnClickListener {
-            Nearby.getConnectionsClient(applicationContext).stopAdvertising()
-            Nearby.getConnectionsClient(applicationContext).stopDiscovery()
-            Nearby.getConnectionsClient(applicationContext).stopAllEndpoints()
-
-            P2PManager.currentEndpointId = null
-            P2PManager.currentEndpointName = null
-
-            prefs.logout()
-            val intent = Intent(this, LoginActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            startActivity(intent)
-        }
-
-        // --- NUEVO DIALOGO FLOTANTE DE CONTRASEÑA ---
-        findViewById<Button>(R.id.btnChangePassword)?.setOnClickListener {
-            val view = layoutInflater.inflate(R.layout.dialog_change_password, null)
-            val dialog = AlertDialog.Builder(this).setView(view).create()
-            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-            val tvTitle = view.findViewById<TextView>(R.id.tvPasswordTitle)
-            val etNewPass = view.findViewById<EditText>(R.id.etNewPassword)
-            val btnCancel = view.findViewById<Button>(R.id.btnCancelPassword)
-            val btnConfirm = view.findViewById<Button>(R.id.btnConfirmPassword)
-
-            // Aplicamos el aura actual a los botones del popup
-            val colorInt = Color.parseColor(currentColorHex)
-            tvTitle.setTextColor(colorInt)
-            btnConfirm.backgroundTintList = ColorStateList.valueOf(colorInt)
-
-            btnCancel.setOnClickListener { dialog.dismiss() }
-            btnConfirm.setOnClickListener {
-                val newPass = etNewPass.text.toString()
-                if (newPass.isNotEmpty()) {
-                    prefs.updatePassword(newPass)
-                    Toast.makeText(this, "Contraseña actualizada", Toast.LENGTH_SHORT).show()
-                    dialog.dismiss()
-                } else {
-                    Toast.makeText(this, "Ingresa una contraseña válida", Toast.LENGTH_SHORT).show()
-                }
-            }
-            dialog.show()
+            Toast.makeText(this, "Identidad actualizada en la Colmena", Toast.LENGTH_SHORT).show()
         }
 
         bottomNavigation.setOnItemSelectedListener { item ->
@@ -202,23 +160,55 @@ class ProfileActivity : AppCompatActivity() {
                     true
                 }
                 R.id.nav_chats -> {
-                    val intent = Intent(this, com.offline.nexu.ui.chat.ChatsListActivity::class.java)
+                    val intent = Intent(this, ChatsListActivity::class.java)
                     intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION
                     startActivity(intent)
                     overridePendingTransition(0, 0)
                     true
                 }
                 R.id.nav_profile -> true
+                R.id.nav_settings -> {
+                    val intent = Intent(this, SettingsActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION
+                    startActivity(intent)
+                    overridePendingTransition(0, 0)
+                    true
+                }
                 else -> false
             }
         }
+    }
+
+    private fun mostrarDialogoEmojisMood(etMoodEmoji: EditText) {
+        val bottomSheet = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.layout_emoji_picker, null)
+        bottomSheet.setContentView(view)
+
+        val currentProfile = prefs.getUserProfile()
+        var auraColor = Color.parseColor("#4CAF50")
+        try { auraColor = Color.parseColor(currentProfile.colorHex) } catch (e: Exception) { e.printStackTrace() }
+
+        val emojiHelper = EmojiHelper(view, auraColor) { emoji ->
+            etMoodEmoji.setText(emoji)
+            bottomSheet.dismiss()
+        }
+        emojiHelper.setup()
+
+        view.findViewById<View>(R.id.flEmojiPicker)?.visibility = View.VISIBLE
+
+        val parent = view.parent as View
+        val layoutParams = parent.layoutParams
+        layoutParams.height = (resources.displayMetrics.heightPixels * 0.55).toInt()
+        parent.layoutParams = layoutParams
+
+        bottomSheet.show()
     }
 
     override fun onResume() {
         super.onResume()
         bottomNavigation.selectedItemId = R.id.nav_profile
         val currentProfile = prefs.getUserProfile()
-        seleccionarColorPorHex(currentProfile.colorHex)
+        aplicarColorGlobal(currentProfile.colorHex)
     }
 
     override fun onPause() {
@@ -226,37 +216,32 @@ class ProfileActivity : AppCompatActivity() {
         overridePendingTransition(0, 0)
     }
 
-    private fun actualizarColorVisual(hexCode: String, selectedView: View) {
-        currentColorHex = hexCode
-        val todasLasVistas = listOf(viewPurple, viewBlue, viewCyan, viewGreen, viewOrange, viewRed)
-        for (vista in todasLasVistas) {
-            vista.alpha = if (vista == selectedView) 1.0f else 0.3f
+    private fun calculateTimeUsingApp(createdAt: Long): String {
+        val diffInMs = System.currentTimeMillis() - createdAt
+        val days = TimeUnit.MILLISECONDS.toDays(diffInMs) + 1
+        return if (days == 1L) {
+            "$days día"
+        } else {
+            "$days días"
         }
+    }
 
+    private fun aplicarColorGlobal(hexCode: String) {
         try {
             val colorInt = Color.parseColor(hexCode)
             tvProfileTitle.setTextColor(colorInt)
+
+            // Colorea la flechita del acordeón con el color del Aura también
+            findViewById<ImageView>(R.id.ivStatsArrow)?.setColorFilter(colorInt)
+
             avatarImageView.backgroundTintList = ColorStateList.valueOf(colorInt)
             btnSave.backgroundTintList = ColorStateList.valueOf(colorInt)
 
             val navColors = ThemeUtils.getBottomNavColorStateList(colorInt)
             bottomNavigation.itemIconTintList = navColors
             bottomNavigation.itemTextColor = navColors
-
         } catch (e: Exception) {
             e.printStackTrace()
-        }
-    }
-
-    private fun seleccionarColorPorHex(hexCode: String) {
-        when (hexCode) {
-            "#2196F3" -> actualizarColorVisual(hexCode, viewBlue)
-            "#00BCD4" -> actualizarColorVisual(hexCode, viewCyan)
-            "#4CAF50" -> actualizarColorVisual(hexCode, viewGreen)
-            "#FF9800" -> actualizarColorVisual(hexCode, viewOrange)
-            "#F44336" -> actualizarColorVisual(hexCode, viewRed)
-            "#FF6200EE" -> actualizarColorVisual(hexCode, viewPurple)
-            else -> actualizarColorVisual("#00BCD4", viewCyan)
         }
     }
 

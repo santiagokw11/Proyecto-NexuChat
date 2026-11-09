@@ -41,6 +41,7 @@ import com.offline.nexu.ui.home.HomeActivity
 import com.offline.nexu.ui.home.P2PManager
 import com.offline.nexu.ui.home.GlobalNotifications
 import com.offline.nexu.ui.profile.ProfileActivity
+import com.offline.nexu.ui.settings.SettingsActivity
 import com.offline.nexu.data.network.NexuMeshManager
 import com.offline.nexu.utils.ThemeUtils
 import kotlinx.coroutines.Dispatchers
@@ -995,6 +996,13 @@ class ChatsListActivity : AppCompatActivity() {
                 R.id.nav_chats -> true
                 R.id.nav_profile -> {
                     val intent = Intent(this, ProfileActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION
+                    startActivity(intent)
+                    overridePendingTransition(0, 0)
+                    true
+                }
+                R.id.nav_settings -> {
+                    val intent = Intent(this, SettingsActivity::class.java)
                     intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION
                     startActivity(intent)
                     overridePendingTransition(0, 0)

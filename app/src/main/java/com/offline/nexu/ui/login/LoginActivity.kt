@@ -21,6 +21,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.offline.nexu.R
@@ -35,6 +37,7 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var binding: ActivityLoginBinding
     private lateinit var prefs: Prefs
     private var currentEmoji = "👤"
+    private var isWaitingForLocation = false
 
     private val avatarOptions = listOf("👤", "🐱", "🐶", "🦊", "🤖", "👾", "😎", "🚀", "🌈", "🔥")
 
@@ -45,7 +48,7 @@ class LoginActivity : AppCompatActivity() {
         prefs = Prefs(this)
 
         if (prefs.isRegistered()) {
-            if (isLocationEnabled()) goToHome() else showLocationWarning()
+            iniciarProcesoDeAcceso()
             return
         }
 
@@ -85,6 +88,7 @@ class LoginActivity : AppCompatActivity() {
             val pass = binding.etPassword.text.toString().trim()
 
             if (!isLocationEnabled()) {
+                isWaitingForLocation = true
                 showLocationWarning()
                 return@setOnClickListener
             }
@@ -99,6 +103,56 @@ class LoginActivity : AppCompatActivity() {
             } else {
                 Toast.makeText(this, "Completa tus credenciales", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun iniciarProcesoDeAcceso() {
+        val sharedSettings = getSharedPreferences("NexuSettings", Context.MODE_PRIVATE)
+        val isEncrypted = sharedSettings.getBoolean("db_encryption", false)
+
+        if (isEncrypted) {
+            mostrarAutenticacionBiometrica()
+        } else {
+            verificarUbicacionYEntrar()
+        }
+    }
+
+    private fun mostrarAutenticacionBiometrica() {
+        val executor = ContextCompat.getMainExecutor(this)
+        val biometricPrompt = BiometricPrompt(this, executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    Toast.makeText(this@LoginActivity, "Se requiere autenticación para acceder", Toast.LENGTH_LONG).show()
+                    finish() // Cierra la app si el usuario cancela la verificación
+                }
+
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    verificarUbicacionYEntrar()
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    Toast.makeText(this@LoginActivity, "Autenticación fallida", Toast.LENGTH_SHORT).show()
+                }
+            })
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("NexuChat Seguro")
+            .setSubtitle("Desbloquea con tu Huella o PIN de dispositivo")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+            .build()
+
+        biometricPrompt.authenticate(promptInfo)
+    }
+
+    private fun verificarUbicacionYEntrar() {
+        if (isLocationEnabled()) {
+            goToHome()
+        } else {
+            isWaitingForLocation = true
+            showLocationWarning()
         }
     }
 
@@ -149,22 +203,18 @@ class LoginActivity : AppCompatActivity() {
                 tvAvatar.text = if (item?.avatar?.startsWith("/") == true || item?.avatar?.startsWith("content://") == true) "🖼" else item?.avatar ?: "👤"
                 tvName.text = item?.name
 
-                // Ocultar X por defecto al refrescar la vista
                 btnDelete.visibility = View.GONE
 
-                // NUEVO: El clic principal de la fila para loguearse
                 view.setOnClickListener {
                     dialog.dismiss()
                     pedirContrasenaParaLogin(item!!.id)
                 }
 
-                // NUEVO: Pulsación larga para revelar la "X"
                 view.setOnLongClickListener {
                     btnDelete.visibility = if (btnDelete.visibility == View.VISIBLE) View.GONE else View.VISIBLE
                     true
                 }
 
-                // NUEVO: El clic en la "X" que invoca el layout elegante de HelpCoin
                 btnDelete.setOnClickListener {
                     mostrarDialogoDesvincular(item!!, dialog)
                 }
@@ -219,7 +269,7 @@ class LoginActivity : AppCompatActivity() {
             if (prefs.verifyPassword(userId, pass)) {
                 prefs.setCurrentSession(userId)
                 dialog.dismiss()
-                goToHome()
+                iniciarProcesoDeAcceso() // También pide biometría tras ingresar la contraseña de la app (si está activa)
             } else {
                 Toast.makeText(this, "Contraseña incorrecta", Toast.LENGTH_SHORT).show()
             }
@@ -240,7 +290,12 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun showLocationWarning() {
-        AlertDialog.Builder(this).setTitle("Ubicación Desactivada").setMessage("Debes encender la ubicación...").setPositiveButton("Ir a Ajustes") { _, _ -> startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }.setCancelable(false).show()
+        AlertDialog.Builder(this)
+            .setTitle("Ubicación Desactivada")
+            .setMessage("Debes encender la ubicación...")
+            .setPositiveButton("Ir a Ajustes") { _, _ -> startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+            .setCancelable(false)
+            .show()
     }
 
     private fun checkAndRequestPermissions() {
@@ -263,6 +318,9 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (prefs.isRegistered() && isLocationEnabled()) goToHome()
+        if (isWaitingForLocation) {
+            isWaitingForLocation = false
+            verificarUbicacionYEntrar()
+        }
     }
 }

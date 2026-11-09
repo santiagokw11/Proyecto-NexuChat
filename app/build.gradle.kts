@@ -45,4 +45,7 @@ dependencies {
     // NUEVO: Librerías Media3 (ExoPlayer) para el reproductor de video nativo
     implementation("androidx.media3:media3-exoplayer:1.3.0")
     implementation("androidx.media3:media3-ui:1.3.0")
+
+    // Login biométrico (SettingsPrivacyActivity / LoginActivity)
+    implementation("androidx.biometric:biometric:1.1.0")
 }

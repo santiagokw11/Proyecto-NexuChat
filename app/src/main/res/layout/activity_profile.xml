@@ -71,19 +71,19 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Biografía o Estado"
+                android:text="Mensaje de Estado"
                 android:textColor="@color/text_primary"
                 android:layout_marginBottom="8dp"
                 android:textStyle="bold"/>
 
             <EditText
-                android:id="@+id/etBio"
+                android:id="@+id/etStatusMessage"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:minHeight="80dp"
                 android:background="@drawable/edittext_rounded"
                 android:gravity="top|start"
-                android:hint="¿Qué estás pensando?"
+                android:hint="Texto breve visible en el radar"
                 android:textColorHint="@color/text_secondary"
                 android:textColor="@color/text_primary"
                 android:padding="12dp"
@@ -93,44 +93,177 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Ocupación / Habilidad"
+                android:text="Estado de Ánimo (Emoji)"
                 android:textColor="@color/text_primary"
                 android:layout_marginBottom="8dp"
                 android:textStyle="bold"/>
 
             <EditText
-                android:id="@+id/etRole"
+                android:id="@+id/etMoodEmoji"
                 android:layout_width="match_parent"
                 android:layout_height="50dp"
                 android:background="@drawable/edittext_rounded"
-                android:hint="Ej: Programador, Diseñador..."
+                android:hint="Toca para elegir"
                 android:textColorHint="@color/text_secondary"
                 android:textColor="@color/text_primary"
                 android:padding="12dp"
                 android:layout_marginBottom="24dp"/>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Color de Nodo (Aura)"
-                android:textColor="@color/text_primary"
-                android:layout_marginBottom="12dp"
-                android:textStyle="bold"/>
-
-            <LinearLayout
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center"
-                android:layout_marginBottom="32dp">
+                android:layout_marginBottom="24dp"
+                app:cardBackgroundColor="@color/surface_card"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp">
 
-                <View android:id="@+id/colorPurple" android:layout_width="45dp" android:layout_height="45dp" android:background="@drawable/circle_background" android:backgroundTint="#FF6200EE" android:layout_marginEnd="8dp" android:alpha="0.3"/>
-                <View android:id="@+id/colorBlue" android:layout_width="45dp" android:layout_height="45dp" android:background="@drawable/circle_background" android:backgroundTint="#2196F3" android:layout_marginEnd="8dp" android:alpha="0.3"/>
-                <View android:id="@+id/colorCyan" android:layout_width="45dp" android:layout_height="45dp" android:background="@drawable/circle_background" android:backgroundTint="#00BCD4" android:layout_marginEnd="8dp" android:alpha="0.3"/>
-                <View android:id="@+id/colorGreen" android:layout_width="45dp" android:layout_height="45dp" android:background="@drawable/circle_background" android:backgroundTint="#4CAF50" android:layout_marginEnd="8dp" android:alpha="0.3"/>
-                <View android:id="@+id/colorOrange" android:layout_width="45dp" android:layout_height="45dp" android:background="@drawable/circle_background" android:backgroundTint="#FF9800" android:layout_marginEnd="8dp" android:alpha="0.3"/>
-                <View android:id="@+id/colorRed" android:layout_width="45dp" android:layout_height="45dp" android:background="@drawable/circle_background" android:backgroundTint="#F44336" android:alpha="0.3"/>
-            </LinearLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:animateLayoutChanges="true">
+
+                    <LinearLayout
+                        android:id="@+id/btnToggleStats"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="20dp"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Estadísticas de Usuario"
+                            android:textColor="@color/primary_color"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:id="@+id/ivStatsArrow"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_arrow_drop_down"
+                            app:tint="@color/primary_color" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/layoutStatsContent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="20dp"
+                        android:paddingBottom="20dp"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="16dp">
+
+                            <LinearLayout
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:background="@drawable/circle_background"
+                                android:backgroundTint="#1A808080"
+                                android:gravity="center">
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:src="@drawable/ic_msg_clock"
+                                    app:tint="@color/text_primary" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="16dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Tiempo en la app"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvTimeUsingApp"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="Calculando..."
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="13sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginStart="56dp"
+                            android:layout_marginBottom="16dp"
+                            android:background="#1A808080" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:background="@drawable/circle_background"
+                                android:backgroundTint="#1A808080"
+                                android:gravity="center">
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:src="@drawable/ic_msg_delivered"
+                                    app:tint="@color/text_primary" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="16dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Mensajes procesados"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvMessagesProcessed"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="Calculando..."
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="13sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
             <Button
                 android:id="@+id/btnSaveProfile"
@@ -140,26 +273,8 @@
                 android:background="@drawable/button_rounded"
                 android:backgroundTint="@color/primary_color"
                 android:textColor="#FFFFFF"
+                android:layout_marginBottom="32dp"
                 android:textStyle="bold"/>
-
-            <Button
-                android:id="@+id/btnChangePassword"
-                android:layout_width="match_parent"
-                android:layout_height="60dp"
-                android:text="Cambiar Contraseña"
-                android:backgroundTint="@color/surface_card"
-                android:textColor="@color/primary_color"
-                android:layout_marginTop="16dp"/>
-
-            <Button
-                android:id="@+id/btnLogout"
-                android:layout_width="match_parent"
-                android:layout_height="60dp"
-                android:text="Cerrar Sesión"
-                android:backgroundTint="@android:color/transparent"
-                android:textColor="#F44336"
-                android:textStyle="bold"
-                android:layout_marginTop="8dp"/>
 
         </LinearLayout>
     </ScrollView>

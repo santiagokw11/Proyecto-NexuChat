@@ -58,6 +58,7 @@ class Prefs(context: Context) {
             newAcc.put("id", profile.id)
             newAcc.put("profile", profile.toJson())
             newAcc.put("password", pass)
+            newAcc.put("created_at", System.currentTimeMillis())
             accountsArray.put(newAcc)
         }
 
@@ -65,7 +66,24 @@ class Prefs(context: Context) {
         setCurrentSession(profile.id)
     }
 
-    // NUEVA FUNCIÓN: Eliminar una cuenta de la bóveda
+    fun getAccountCreatedAt(userId: String): Long {
+        val accountsArray = getSavedAccountsArray()
+        for (i in 0 until accountsArray.length()) {
+            val acc = accountsArray.getJSONObject(i)
+            if (acc.getString("id") == userId) {
+                return if (acc.has("created_at")) {
+                    acc.getLong("created_at")
+                } else {
+                    val currentTime = System.currentTimeMillis()
+                    acc.put("created_at", currentTime)
+                    prefs.edit().putString("saved_accounts", accountsArray.toString()).apply()
+                    currentTime
+                }
+            }
+        }
+        return System.currentTimeMillis()
+    }
+
     fun deleteAccount(userId: String) {
         val accountsArray = getSavedAccountsArray()
         val newArray = JSONArray()
