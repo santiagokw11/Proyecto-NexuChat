@@ -12,7 +12,6 @@ dsNexuChat es una aplicación de mensajería instantánea P2P (Peer-to-Peer) des
 - [Funcionalidades](#funcionalidades)
 - [Arquitectura y stack técnico](#arquitectura-y-stack-técnico)
 - [Permisos que solicita la app](#permisos-que-solicita-la-app)
-- [Cómo compilar y ejecutar](#cómo-compilar-y-ejecutar)
 - [Cómo probar](#cómo-probar)
 - [Limitaciones conocidas](#limitaciones-conocidas)
 - [Documentación adicional](#documentación-adicional)
@@ -23,17 +22,33 @@ dsNexuChat es una aplicación de mensajería instantánea P2P (Peer-to-Peer) des
 
 > Capturadas en un dispositivo físico real (Samsung Galaxy A55, `SM-A556B`) corriendo la build actual.
 
-| Radar P2P | Lista de chats |
-|---|---|
-| ![Radar](docs/screenshots/radar.png) | ![Chats](docs/screenshots/chats_list.png) |
-
-| Conversación | Perfil |
-|---|---|
-| ![Conversación](docs/screenshots/chat_conversation.png) | ![Perfil](docs/screenshots/profile.png) |
-
-| Ajustes |
-|---|
-| ![Ajustes](docs/screenshots/settings.png) |
+<table align="center">
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/radar.png" width="220"/><br/>
+      <sub><b>Radar P2P</b></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/chats_list.png" width="220"/><br/>
+      <sub><b>Lista de chats</b></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/chat_conversation.png" width="220"/><br/>
+      <sub><b>Conversación</b></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/profile.png" width="220"/><br/>
+      <sub><b>Perfil</b></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/settings.png" width="220"/><br/>
+      <sub><b>Ajustes</b></sub>
+    </td>
+    <td width="33%"></td>
+  </tr>
+</table>
 
 ---
 
@@ -59,7 +74,7 @@ Estado real verificado en el código, no aspiracional. Basado en el catálogo co
 | Enrutamiento mesh con reenvío entre nodos (TTL de 4 saltos) | ✅ Implementado |
 | Modo Fantasma (dejar de emitir señal, solo escuchar) | ✅ Implementado |
 | Reintento automático de mensajes pendientes al reconectar | ✅ Implementado |
-| Servicio real en segundo plano (seguir recibiendo con la app minimizada) | ✅ Implementado — `ConnectionService` arranca su propio ciclo de advertising/discovery (`NexuMeshManager.iniciarModoWalkieTalkie`) y se reinicia solo si el sistema lo mata; `NexuApplication` lo arranca también al iniciar el proceso si ya hay una cuenta registrada |
+| Servicio real en segundo plano (seguir recibiendo con la app minimizada) | ✅ Implementado — la app sigue escuchando y conectándose con otros nodos aunque la minimices; si Android llega a cerrarla por memoria, se reactiva sola la próxima vez que el sistema le da una oportunidad |
 | Notificación de proximidad ("Fulano entró en rango") | ✅ Implementado |
 
 ### Mensajería
@@ -82,26 +97,26 @@ Estado real verificado en el código, no aspiracional. Basado en el catálogo co
 
 ## Arquitectura y stack técnico
 
-- **Lenguaje:** Kotlin, 100% nativo (sin frameworks multiplataforma).
-- **Mínimo SDK:** Android 8.0 (API 26). `compileSdk`/`targetSdk`: 34.
-- **Persistencia:** Room (SQLite) — dos entidades principales, `messages` y `groups`.
-- **Red P2P:** [Google Nearby Connections](https://developers.google.com/nearby/connections/overview) (`com.google.android.gms:play-services-nearby`), estrategia `P2P_CLUSTER`.
-- **Protocolo de aplicación:** mensajes de texto plano con cabeceras propias sobre los payloads de Nearby (`MESH|`, `GMESH|`, `SYS:GROUP_CREATE|`, `TXT:`, etc.) para enrutamiento, ACKs y comandos de grupo.
-- **Reproducción multimedia:** AndroidX Media3/ExoPlayer para video.
-- **Biometría:** AndroidX Biometric.
-- **UI:** Vistas tradicionales (View Binding), sin Jetpack Compose.
+- **Lenguaje:** todo el proyecto está escrito en Kotlin puro. No se usa Flutter, React Native ni ningún otro framework multiplataforma.
+- **Qué celulares la pueden correr:** desde Android 8.0 en adelante (lanzado en 2017), así que prácticamente cualquier equipo actual la soporta.
+- **Dónde se guardan los mensajes:** en el propio teléfono, con una base de datos local (Room, sobre SQLite). No hay un servidor en internet guardando nada.
+- **Cómo se conectan los teléfonos entre sí:** con Google Nearby Connections, la misma tecnología que usan apps como Google Files para compartir archivos sin internet. Se eligió el modo que permite que varios dispositivos estén conectados entre sí al mismo tiempo (no solo de uno a uno), que es lo que hace posible armar la red mesh.
+- **Cómo viaja la información:** cada mensaje que salta de teléfono en teléfono lleva una pequeña "etiqueta" que dice quién lo manda, para quién es y cuántos saltos más puede dar; el contenido del mensaje en sí va cifrado de extremo a extremo, así que ningún teléfono que solo esté retransmitiendo puede leerlo (más detalle en la tabla de Funcionalidades).
+- **Videos y audios:** se reproducen con AndroidX Media3/ExoPlayer, el reproductor que usa Android por debajo de apps como YouTube.
+- **Huella/rostro al entrar:** con AndroidX Biometric, la librería oficial de Android para biometría.
+- **Pantallas:** hechas con el sistema de vistas tradicional de Android (View Binding), no con Jetpack Compose.
 
-### Estructura de paquetes (`app/src/main/java/com/offline/nexu/`)
+### Cómo está organizado el código (`app/src/main/java/com/offline/nexu/`)
 ```
-data/           Entidades Room, DAO, Prefs (SharedPreferences)
-data/network/   NexuMeshManager — envío/recepción de paquetes P2P, protocolo mesh
-ui/home/        Radar (HomeActivity) y P2PManager — estado global de conexión
-ui/chat/        Lista de chats, conversación, grupos, bóveda multimedia
+data/           Entidades de la base de datos, consultas, preferencias guardadas
+data/network/   Todo lo que envía y recibe por la red P2P (NexuMeshManager, el cifrado)
+ui/home/        El Radar y el estado de quién está conectado en este momento
+ui/chat/        Lista de chats, conversación, grupos, galería de multimedia
 ui/profile/     Perfil del usuario
 ui/settings/    Ajustes, privacidad, personalización, tema
-ui/login/       Registro/acceso local y multicuenta
-notifications/  Receiver de notificaciones de conexión entrante
-utils/          Utilidades (tema, generador de IDs de mensaje)
+ui/login/       Registro, inicio de sesión y multicuenta
+notifications/  Qué pasa cuando tocas "Aceptar"/"Rechazar" en una notificación de conexión
+utils/          Cosas chiquitas que se usan en varias partes (tema, generador de IDs)
 ```
 
 ---
@@ -121,22 +136,6 @@ Cada permiso se pide en tiempo de ejecución justo antes de usarse (no todos al 
 | `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` / `READ_EXTERNAL_STORAGE` (según versión) | Adjuntar imágenes/videos de la galería | Al abrir el selector de galería |
 | `VIBRATE` | Vibración al recibir zumbidos/notificaciones | No requiere diálogo (normal) |
 | `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_CONNECTED_DEVICE` | Mantener la conexión P2P activa en segundo plano | No requiere diálogo (normal) |
-
----
-
-## Cómo compilar y ejecutar
-
-Requisitos: Android Studio reciente, JDK 17+ (el proyecto usa el JBR incluido en Android Studio), SDK de Android con API 34 instalado.
-
-```bash
-git clone https://github.com/santiagokw11/Proyecto-NexuChat.git
-cd Proyecto-NexuChat
-./gradlew assembleDebug      # compila el APK de debug
-./gradlew lintDebug          # análisis estático
-./gradlew build              # build completo (igual al que corre en CI)
-```
-
-El APK queda en `app/build/outputs/apk/debug/app-debug.apk`. Para probar la conectividad P2P real se necesitan **dos dispositivos físicos** (el emulador no soporta Bluetooth/Nearby Connections).
 
 ---
 
