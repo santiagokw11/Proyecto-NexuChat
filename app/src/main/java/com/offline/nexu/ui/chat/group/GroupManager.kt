@@ -41,6 +41,10 @@ object GroupManager {
             val avatarPayloadId = parts[4].toLongOrNull()
             val expirationTime = parts[5].toLongOrNull()?.takeIf { it > 0 }
             val version = parts[6].toLongOrNull() ?: 1L
+            // Clave AES del grupo, envuelta por el admin con ECDH para mí (ver createGroupNetworkCommand
+            // / addMemberToGroup). Campo 8 opcional: ausente en builds viejas o si el admin aún no
+            // tenía mi llave pública al crear el grupo (el grupo queda sin cifrar, fallback PLAIN:).
+            val wrappedGroupKey = parts.getOrNull(7) ?: ""
 
             CoroutineScope(Dispatchers.IO).launch {
               try {
@@ -48,7 +52,12 @@ object GroupManager {
                 val existing = db.nexuDao().getGroup(groupId)
                 Log.d(TAG, "groupId=$groupId existing=${existing != null}")
                 if (existing == null) {
-                    val group = GroupEntity(groupId, groupName, null, "", members, expirationTime, version)
+                    // senderEndpointId es un endpointId real si este comando llegó "crudo" (SYS:GROUP_CREATE|
+                    // sin envoltura MESH), o ya es el nombre del admin si llegó envuelto en TXT: via MESH
+                    // (NexuMeshManager reenvía el payload limpio usando el nombre, no el endpointId).
+                    val adminName = P2PManager.connectedNames[senderEndpointId] ?: senderEndpointId
+                    val groupKeyB64 = com.offline.nexu.data.network.CryptoManager.desenvolverClaveDeGrupoDePeer(context, adminName, wrappedGroupKey)
+                    val group = GroupEntity(groupId, groupName, null, "", members, expirationTime, version, groupKeyB64)
                     db.nexuDao().insertGroup(group)
                     Log.d(TAG, "Grupo insertado OK: $groupId '$groupName' miembros=$members")
 
@@ -155,9 +164,14 @@ object GroupManager {
         val allMembersIds = realMemberNames + myName
         val membersString = allMembersIds.joinToString(",")
 
+        // Clave AES del grupo: la genera el admin una sola vez y se reparte envuelta (ECDH) por
+        // miembro en el propio comando SYS:GROUP_CREATE (ver más abajo), nunca en claro.
+        val groupKeyB64 = com.offline.nexu.data.network.CryptoManager.generarClaveDeGrupoBase64()
+
         val groupEntity = GroupEntity(
             groupId = groupId, groupName = groupName, groupAvatar = selectedImageUri?.toString(),
-            adminId = myLocalUserId, members = membersString, expirationTime = expirationTime
+            adminId = myLocalUserId, members = membersString, expirationTime = expirationTime,
+            encryptionKeyB64 = groupKeyB64
         )
 
         var avatarPayloadId: Long? = null
@@ -187,10 +201,13 @@ object GroupManager {
                 db.nexuDao().insertMessage(dummyMsg)
 
                 val expStr = expirationTime?.toString() ?: "0"
-                val cmd = "SYS:GROUP_CREATE|$groupId|$groupName|$membersString|${avatarPayloadId ?: ""}|$expStr|${groupEntity.version}"
 
                 selectedContactsIds.forEach { memberId ->
                     val targetName = P2PManager.connectedNames[memberId] ?: memberId
+                    // Envuelvo la clave del grupo con ECDH usando la llave pública de ESTE miembro:
+                    // cada uno recibe su propia copia cifrada, nadie más puede leerla en tránsito.
+                    val wrappedKey = com.offline.nexu.data.network.CryptoManager.envolverClaveDeGrupoParaPeer(context, targetName, groupKeyB64)
+                    val cmd = "SYS:GROUP_CREATE|$groupId|$groupName|$membersString|${avatarPayloadId ?: ""}|$expStr|${groupEntity.version}|$wrappedKey"
                     val msgId = MsgIdGenerator.next()
 
                     // GUARDAR EL COMANDO EN DB PARA GARANTIZAR ENTREGA POR SYNC SI SE DESCONECTAN
@@ -244,7 +261,10 @@ object GroupManager {
                 db.nexuDao().insertGroup(updatedGroup)
 
                 val expStr = group.expirationTime?.toString() ?: "0"
-                val cmdCreate = "SYS:GROUP_CREATE|$groupId|${group.groupName}|$newMembersString||$expStr|$newVersion"
+                // Envuelvo para el nuevo miembro la MISMA clave de grupo ya existente (no se genera
+                // una nueva: el resto de miembros ya la tienen y seguirían usando la vieja).
+                val wrappedKeyNuevo = com.offline.nexu.data.network.CryptoManager.envolverClaveDeGrupoParaPeer(context, targetNuevo, group.encryptionKeyB64 ?: "")
+                val cmdCreate = "SYS:GROUP_CREATE|$groupId|${group.groupName}|$newMembersString||$expStr|$newVersion|$wrappedKeyNuevo"
 
                 val msgIdCreate = MsgIdGenerator.next()
                 val pendingSysMsgCreate = MessageEntity(
@@ -279,7 +299,7 @@ object GroupManager {
                 val eventText = "$myName añadió a $targetNuevo"
                 val eventId = MsgIdGenerator.next()
                 try {
-                    NexuMeshManager.enviarMensajeGrupoMesh(context, myLocalUserId, myName, groupId, eventId, "TXT:0:SYS:EVENT:$eventText")
+                    NexuMeshManager.enviarMensajeGrupoMesh(context, myLocalUserId, myName, groupId, eventId, "TXT:0:SYS:EVENT:$eventText", group.encryptionKeyB64)
                 } catch (e: Exception) {}
 
                 val localMsg = MessageEntity(
@@ -320,7 +340,7 @@ object GroupManager {
                 val eventText = "$myName eliminó a $targetRemover"
                 val eventId = MsgIdGenerator.next()
                 try {
-                    NexuMeshManager.enviarMensajeGrupoMesh(context, myLocalUserId, myName, groupId, eventId, "TXT:0:SYS:EVENT:$eventText")
+                    NexuMeshManager.enviarMensajeGrupoMesh(context, myLocalUserId, myName, groupId, eventId, "TXT:0:SYS:EVENT:$eventText", group.encryptionKeyB64)
                 } catch (e: Exception) {}
 
                 val cmdUpdate = "SYS:GROUP_UPDATE|$groupId|${group.groupName}|$newMembersString|$newVersion"

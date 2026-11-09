@@ -556,6 +556,7 @@ class HomeActivity : AppCompatActivity() {
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             perms.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            perms.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         return perms.toTypedArray()
     }
@@ -629,6 +630,10 @@ class HomeActivity : AppCompatActivity() {
             } else {
                 enviarNotificacionSistema(notif.endpointId, notif.nombre, "entrante")
             }
+        } else if (!isActivityVisible) {
+            // Notificación de proximidad: un contacto conocido entró en rango. Antes solo se
+            // agregaba a la lista interna (campanita) y, con la app minimizada, nunca se veía.
+            enviarNotificacionSistema(notif.endpointId, notif.nombre, "proximidad")
         }
     }
 
@@ -693,6 +698,22 @@ class HomeActivity : AppCompatActivity() {
                 .addAction(android.R.drawable.ic_menu_add, "Aceptar", acceptPending)
                 .setAutoCancel(true)
                 .setTimeoutAfter(60000)
+
+            notifManager.notify(notifId, builder.build())
+        } else if (tipo == "proximidad") {
+            val openIntent = Intent(this, HomeActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val openPending = android.app.PendingIntent.getActivity(this, notifId, openIntent, android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
+
+            val builder = androidx.core.app.NotificationCompat.Builder(this, channelId)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("📡 Nodo en el área")
+                .setContentText("$nombre entró en Modo Nexo")
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
+                .setContentIntent(openPending)
+                .setAutoCancel(true)
+                .setTimeoutAfter(120000)
 
             notifManager.notify(notifId, builder.build())
         }
@@ -793,6 +814,8 @@ class HomeActivity : AppCompatActivity() {
 
                 binding.radarView.removeUser(endpointId)
                 P2PManager.sendProfileHandshake(endpointId, Prefs(applicationContext).getUserProfile(), applicationContext)
+                NexuMeshManager.compartirLlavePublica(applicationContext, endpointId)
+                P2PManager.notificarEventoConexionEnChat(applicationContext, nombreDestino, conectado = true)
 
                 Toast.makeText(this@HomeActivity, "Conexión establecida con $nombreDestino", Toast.LENGTH_SHORT).show()
                 binding.tvRadarStatus.text = if (isVisibleToOthers) "Buscando colmena P2P..." else "Escaneando en modo fantasma..."
@@ -810,6 +833,8 @@ class HomeActivity : AppCompatActivity() {
 
         override fun onDisconnected(endpointId: String) {
             Toast.makeText(this@HomeActivity, "Desconectado de la red P2P", Toast.LENGTH_SHORT).show()
+            val nombreDesconectado = endpointNamesTemp[endpointId] ?: P2PManager.connectedNames[endpointId]
+            if (nombreDesconectado != null) P2PManager.notificarEventoConexionEnChat(applicationContext, nombreDesconectado, conectado = false)
             if (P2PManager.currentEndpointId == endpointId) {
                 P2PManager.currentEndpointId = null
                 P2PManager.currentEndpointName = null

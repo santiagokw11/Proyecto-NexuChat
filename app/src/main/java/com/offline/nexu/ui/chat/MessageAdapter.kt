@@ -380,7 +380,10 @@ class MessageAdapter(
 
         } else {
             holder.layoutReceived.visibility = View.VISIBLE
-            holder.tvTimeReceived.text = timeString
+            // Indicador de batería del emisor: último % reportado por ESE remitente (ver
+            // P2PManager.contactBatteryLevels), no el actual mío. Solo si se conoce.
+            val bateriaEmisor = com.offline.nexu.ui.home.P2PManager.contactBatteryLevels[currentMessage.originalSender]
+            holder.tvTimeReceived.text = if (bateriaEmisor != null) "$timeString · 🔋$bateriaEmisor%" else timeString
 
             if (currentMessage.isGroup) {
                 holder.tvSenderName.visibility = View.VISIBLE; holder.tvSenderName.text = currentMessage.originalSender ?: "Miembro"; holder.tvSenderName.setTextColor(auraColor)

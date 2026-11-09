@@ -78,6 +78,7 @@ class ChatActivity : AppCompatActivity() {
     private var isGroup: Boolean = false
     private var groupId: String = ""
     private var groupExpirationTime: Long? = null
+    private var groupEncryptionKeyB64: String? = null
 
     private var isTyping = false
     private var lastSentNudgeTime = 0L
@@ -188,6 +189,7 @@ class ChatActivity : AppCompatActivity() {
                 val group = database.nexuDao().getGroup(groupId)
                 val avatarStr = group?.groupAvatar ?: "👥"
                 groupExpirationTime = group?.expirationTime
+                groupEncryptionKeyB64 = group?.encryptionKeyB64
 
                 withContext(Dispatchers.Main) {
                     cargarAvatarContacto(avatarStr)
@@ -541,8 +543,7 @@ class ChatActivity : AppCompatActivity() {
             binding.etMessage.text.clear(); binding.cvImagePreview.visibility = View.GONE; selectedImageUri = null; setButtonSendIcon()
             isTyping = false; enviarPayloadSistema(MsgIdGenerator.next(), "SYS:TYPING:0")
 
-            if (isDebugMode) enviarMensajeSimulado(msgId)
-            else enviarMensajeRed(msgId, text, image, ephemeralDuration, isGroup)
+            enviarMensajeRed(msgId, text, image, ephemeralDuration, isGroup)
         }
 
         binding.root.findViewById<View>(R.id.btnCancelRecording)?.setOnClickListener {
@@ -609,10 +610,19 @@ class ChatActivity : AppCompatActivity() {
             }
             lastSentNudgeTime = currentTime; val msgId = MsgIdGenerator.next()
 
-            enviarPayloadSistema(msgId, "SYS:NUDGE")
-            val newMsg = Message(msgId, "Enviaste un zumbido 📳", null, true, 99, originalSender = myLocalUserId, isGroup = isGroup)
-            adapter.addMessage(newMsg); binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
-            guardarMensajeEnBD(msgId, "Enviaste un zumbido 📳", null, true, 99, myLocalUserId, null)
+            if (isDebugMode) {
+                val msgId = MsgIdGenerator.next()
+                val text = "SYS:NUDGE"
+                val newMsg = Message(msgId, "Enviaste un zumbido \uD83D\uDCF3", null, true, 0, originalSender = myLocalUserId, isGroup = isGroup)
+                adapter.addMessage(newMsg); binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
+                guardarMensajeEnBD(msgId, "Enviaste un zumbido \uD83D\uDCF3", null, true, 0, myLocalUserId, null)
+                enviarMensajeSimulado(msgId, text, null, 0L, isGroup)
+            } else {
+                enviarPayloadSistema(msgId, "SYS:NUDGE")
+                val newMsg = Message(msgId, "Enviaste un zumbido \uD83D\uDCF3", null, true, 99, originalSender = myLocalUserId, isGroup = isGroup)
+                adapter.addMessage(newMsg); binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
+                guardarMensajeEnBD(msgId, "Enviaste un zumbido \uD83D\uDCF3", null, true, 99, myLocalUserId, null)
+            }
         }
     }
 
@@ -738,8 +748,7 @@ class ChatActivity : AppCompatActivity() {
         binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
         guardarMensajeEnBD(msgId, text, uri.toString(), true, 0, myLocalUserId, expiresAt)
 
-        if (isDebugMode) enviarMensajeSimulado(msgId)
-        else enviarMensajeRed(msgId, text, uri, ephemeralDuration, isGroup)
+        enviarMensajeRed(msgId, text, uri, ephemeralDuration, isGroup)
     }
 
     override fun onDestroy() {
@@ -809,6 +818,19 @@ class ChatActivity : AppCompatActivity() {
 
     private fun enviarPayloadSistema(msgId: Long, comando: String) {
         if (isGroup) return
+        if (isDebugMode) {
+            if (comando == "SYS:TYPING:1") {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    binding.tvStatus.text = "Escribiendo... ✍️"
+                    binding.tvStatus.setTextColor(auraColor)
+                }, 2000)
+            } else if (comando == "SYS:TYPING:0") {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    actualizarEstadoConexion()
+                }, 500)
+            }
+            return
+        }
         try {
             val myName = prefs.getUserProfile().name
             NexuMeshManager.enviarMensajeMesh(applicationContext, myLocalUserId, myName, chatIdentifier, msgId, "TXT:$msgId:$comando")
@@ -833,6 +855,10 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun enviarMensajeRed(msgId: Long, text: String, imageUri: Uri?, duration: Long, isGroupMsg: Boolean) {
+        if (isDebugMode) {
+            enviarMensajeSimulado(msgId, text, imageUri, duration, isGroupMsg)
+            return
+        }
         try {
             val eps = NexuMeshManager.connectedEndpoints.toList()
             val target = if (isGroupMsg) groupId else chatIdentifier
@@ -855,7 +881,7 @@ class ChatActivity : AppCompatActivity() {
                     }
                     val header = if (duration > 0) "EPH:$msgId:$duration:$text" else "$headerType:${filePayload.id}:$msgId:$text"
 
-                    if (isGroupMsg) NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, myName, target, msgId, header)
+                    if (isGroupMsg) NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, myName, target, msgId, header, groupEncryptionKeyB64)
                     else NexuMeshManager.enviarMensajeMesh(applicationContext, myLocalUserId, myName, target, msgId, header)
 
                     P2PManager.outgoingPayloadsTracker[filePayload.id] = msgId
@@ -877,7 +903,7 @@ class ChatActivity : AppCompatActivity() {
                 }
             } else if (text.isNotEmpty()) {
                 val header = if (duration > 0) "EPH:$msgId:$duration:$text" else "TXT:$msgId:$text"
-                if (isGroupMsg) NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, myName, target, msgId, header)
+                if (isGroupMsg) NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, myName, target, msgId, header, groupEncryptionKeyB64)
                 else NexuMeshManager.enviarMensajeMesh(applicationContext, myLocalUserId, myName, target, msgId, header)
             }
         } catch (e: Exception) {
@@ -965,7 +991,9 @@ class ChatActivity : AppCompatActivity() {
         val isConnected = (P2PManager.currentEndpointName == chatIdentifier) || P2PManager.connectedNames.containsValue(chatIdentifier) || NexuMeshManager.connectedEndpoints.contains(chatIdentifier)
 
         if (isConnected) {
-            binding.tvStatus.text = "En línea 🟢"; binding.tvStatus.setTextColor(getColor(R.color.text_primary))
+            val bateria = P2PManager.contactBatteryLevels[chatIdentifier]
+            binding.tvStatus.text = if (bateria != null) "En línea 🟢 · 🔋${bateria}%" else "En línea 🟢"
+            binding.tvStatus.setTextColor(getColor(R.color.text_primary))
             sharedPrefs.edit().putLong("last_seen_$chatIdentifier", System.currentTimeMillis()).apply()
             if (!wasConnected) { wasConnected = true; reenviarMensajesEnEspera() }
         } else {
@@ -1116,8 +1144,102 @@ class ChatActivity : AppCompatActivity() {
         Toast.makeText(this, "Mensaje reenviado", Toast.LENGTH_SHORT).show()
     }
 
-    private fun enviarMensajeSimulado(msgId: Long) {
-        Handler(Looper.getMainLooper()).postDelayed({ adapter.updateMessageStatus(msgId, 1); actualizarEstadoEnBD(msgId, 1) }, 500)
-        Handler(Looper.getMainLooper()).postDelayed({ adapter.updateMessageStatus(msgId, 2); actualizarEstadoEnBD(msgId, 2) }, 1500)
+    private fun enviarMensajeSimulado(msgId: Long, text: String, imageUri: Uri?, duration: Long, isGroupMsg: Boolean) {
+        val handler = Handler(Looper.getMainLooper())
+        
+        if (imageUri != null) {
+            var progress = 0
+            val runnable = object : Runnable {
+                override fun run() {
+                    progress += 20
+                    if (progress <= 100) {
+                        adapter.updateProgress(msgId, progress)
+                        handler.postDelayed(this, 200)
+                    } else {
+                        adapter.updateMessageStatus(msgId, 1)
+                        actualizarEstadoEnBD(msgId, 1)
+                        continuarSimulacion(msgId, text, imageUri, duration, isGroupMsg)
+                    }
+                }
+            }
+            handler.postDelayed(runnable, 200)
+        } else {
+            handler.postDelayed({ 
+                adapter.updateMessageStatus(msgId, 1)
+                actualizarEstadoEnBD(msgId, 1) 
+                continuarSimulacion(msgId, text, null, duration, isGroupMsg)
+            }, 500)
+        }
+    }
+
+    private fun continuarSimulacion(msgId: Long, text: String, imageUri: Uri?, duration: Long, isGroupMsg: Boolean) {
+        val handler = Handler(Looper.getMainLooper())
+
+        handler.postDelayed({ 
+            adapter.updateMessageStatus(msgId, 2)
+            actualizarEstadoEnBD(msgId, 2) 
+        }, 1000)
+
+        handler.postDelayed({ 
+            adapter.updateMessageStatus(msgId, 3)
+            actualizarEstadoEnBD(msgId, 3) 
+        }, 2500)
+        
+        handler.postDelayed({ 
+            binding.tvStatus.text = "Escribiendo... ✍️"
+            binding.tvStatus.setTextColor(auraColor)
+        }, 3500)
+        
+        handler.postDelayed({ 
+            actualizarEstadoConexion()
+            
+            val respuesta = when {
+                imageUri != null -> "¡Recibí tu archivo! Está genial. 🚀"
+                text == "SYS:NUDGE" -> "¡Uy! Recibí tu zumbido 😵"
+                text.startsWith("[Audio]") -> "Acabo de escuchar tu audio. Suena bien. 🎵"
+                duration > 0 -> "He recibido tu mensaje efímero, se destruirá pronto. ⏳"
+                else -> "Recibí tu mensaje: '$text'. Soy el Robot de pruebas 🤖."
+            }
+            
+            val incomingMsgId = MsgIdGenerator.next()
+            val sender = if (isGroupMsg) "Robot 🤖" else chatIdentifier
+            val expiresAt = if (duration > 0) System.currentTimeMillis() + duration else null
+            
+            val newMsg = Message(
+                msgId = incomingMsgId,
+                text = respuesta,
+                imageUrl = null,
+                isMine = false,
+                status = 0,
+                progress = 100,
+                originalSender = sender,
+                isGroup = isGroupMsg,
+                expiresAt = expiresAt
+            )
+            
+            if (text == "SYS:NUDGE") {
+                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
+                val pattern = longArrayOf(0, 500, 200, 500, 200, 800)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(android.os.VibrationEffect.createWaveform(pattern, -1))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(pattern, -1)
+                }
+                Toast.makeText(this@ChatActivity, "¡$sender te ha enviado un zumbido! 💥", Toast.LENGTH_LONG).show()
+            }
+            
+            adapter.addMessage(newMsg)
+            if (expiresAt != null) activeMessagesTracker.add(newMsg)
+            
+            binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
+            guardarMensajeEnBD(incomingMsgId, respuesta, null, false, 0, sender, expiresAt)
+            
+            handler.postDelayed({ 
+                adapter.updateMessageStatus(incomingMsgId, 3) 
+                actualizarEstadoEnBD(incomingMsgId, 3)
+            }, 1500)
+            
+        }, 6000)
     }
 }

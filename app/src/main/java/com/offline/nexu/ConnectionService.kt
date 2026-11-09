@@ -8,11 +8,18 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.offline.nexu.ui.home.P2PManager
+import com.offline.nexu.data.local.Prefs
+import com.offline.nexu.data.network.NexuMeshManager
 
 class ConnectionService : Service() {
 
     private val CHANNEL_ID = "NexuConnectionService"
+
+    // Instancia única y persistente: antes este servicio solo mostraba una notificación y no
+    // hacía nada de red, así que la app dejaba de recibir mensajes/grupos en cuanto el usuario
+    // salía de la pantalla Radar. Ahora mantiene su propio ciclo de advertising/discovery para
+    // seguir formando parte de la malla aunque ninguna Activity esté visible.
+    private var meshManager: NexuMeshManager? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -30,14 +37,23 @@ class ConnectionService : Service() {
         // Inicia el servicio en primer plano para que Android no lo mate
         startForeground(1, notification)
 
-        // Aquí puedes inicializar tu lógica de P2PManager si no está iniciada
+        if (meshManager == null) {
+            val profile = Prefs(this).getUserProfile()
+            if (profile.id.isNotEmpty()) {
+                meshManager = NexuMeshManager(applicationContext, profile.name)
+                meshManager?.iniciarModoWalkieTalkie()
+            }
+        }
+
         return START_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // Solo aquí se debe limpiar la sesión, cuando el servicio se detiene explícitamente
-        P2PManager.clearSession()
+        // No llamamos P2PManager.clearSession() aquí: eso es para un logout explícito
+        // (ver P2PManager.cerrarSesionCompleta). Si el sistema mata y reinicia este servicio
+        // por memoria, no debe desconectar ni borrar la sesión activa del usuario.
+        meshManager = null
     }
 
     override fun onBind(intent: Intent?): IBinder? {

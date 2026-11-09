@@ -53,6 +53,14 @@ class NexuMeshManager(private val context: Context, private val nickname: String
             Nearby.getConnectionsClient(context).rejectConnection(endpointId)
         }
 
+        // Comparte mi llave pública con un vecino recién conectado (handshake de cifrado E2E).
+        fun compartirLlavePublica(context: Context, endpointId: String) {
+            try {
+                val payload = Payload.fromBytes("PUBKEY:${CryptoManager.getPublicKeyBase64(context)}".toByteArray(Charsets.UTF_8))
+                Nearby.getConnectionsClient(context).sendPayload(endpointId, payload)
+            } catch (e: Exception) {}
+        }
+
         private fun mostrarNotificacionMensaje(context: Context, chatName: String, text: String, isGroup: Boolean) {
             val channelId = "nexu_chat_messages"
             val notifManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -95,6 +103,17 @@ class NexuMeshManager(private val context: Context, private val nickname: String
                             return
                         } else if (data.startsWith("PONG:")) {
                             return
+                        } else if (data.startsWith("BATT:")) {
+                            val pct = data.substringAfter("BATT:").toIntOrNull()
+                            val name = P2PManager.connectedNames[endpointId]
+                            if (pct != null && name != null) P2PManager.contactBatteryLevels[name] = pct
+                            return
+                        } else if (data.startsWith("PUBKEY:")) {
+                            // Intercambio de llave pública con el vecino directo: habilita el
+                            // cifrado E2E de los mensajes que se envíen hacia/desde este nombre.
+                            val name = P2PManager.connectedNames[endpointId]
+                            if (name != null) CryptoManager.registrarLlavePublicaDePeer(name, data.substringAfter("PUBKEY:"))
+                            return
                         } else if (data.startsWith("MESH|")) {
                             val parts = data.split("|", limit = 7)
                             if (parts.size >= 7) {
@@ -111,6 +130,11 @@ class NexuMeshManager(private val context: Context, private val nickname: String
 
                                 val isForMe = targetId == myLocalUserId || targetId == myLocalUserName || targetId == P2PManager.activeChatIdentifier
 
+                                // Cifrado E2E: solo el destinatario real puede descifrar realContent
+                                // (clave derivada por ECDH con el remitente). Un nodo que solo reenvía
+                                // (isForMe == false) nunca intenta descifrar ni ve el contenido en claro.
+                                val contenidoParaMi = if (isForMe) CryptoManager.decryptFrom(context, senderName, realContent) else null
+
                                 // SOLUCIÓN: ENVIAR ACK INMEDIATAMENTE PARA QUE APAREZCA EL CHULITO EN EL OTRO CELULAR
                                 if (msgId != 0L && isForMe) {
                                     val ackPayload = Payload.fromBytes("ACK:$msgId".toByteArray(Charsets.UTF_8))
@@ -120,23 +144,23 @@ class NexuMeshManager(private val context: Context, private val nickname: String
                                 if (msgId != 0L && seenMessagesCache.contains(msgId)) return
                                 if (msgId != 0L) seenMessagesCache.add(msgId)
 
-                                CoroutineScope(Dispatchers.IO).launch {
+                                if (contenidoParaMi != null) CoroutineScope(Dispatchers.IO).launch {
                                     try {
                                         val db = AppDatabase.getDatabase(context)
                                         var textoToSave: String? = null
                                         var durationStr: String? = null
 
-                                        if (realContent.startsWith("TXT:")) {
-                                            textoToSave = realContent.substringAfter("TXT:").substringAfter(":")
-                                        } else if (realContent.startsWith("EPH:")) {
-                                            val ephParts = realContent.split(":", limit = 4)
+                                        if (contenidoParaMi.startsWith("TXT:")) {
+                                            textoToSave = contenidoParaMi.substringAfter("TXT:").substringAfter(":")
+                                        } else if (contenidoParaMi.startsWith("EPH:")) {
+                                            val ephParts = contenidoParaMi.split(":", limit = 4)
                                             if (ephParts.size >= 4) {
                                                 durationStr = ephParts[2]
                                                 textoToSave = ephParts[3]
                                             }
                                         }
 
-                                        if (textoToSave != null && !realContent.contains("SYS:")) {
+                                        if (textoToSave != null && !contenidoParaMi.contains("SYS:")) {
                                             val expiresAt = if ((durationStr?.toLongOrNull() ?: 0L) > 0) System.currentTimeMillis() + durationStr!!.toLong() else null
                                             val entity = MessageEntity(
                                                 msgId = msgId,
@@ -154,15 +178,15 @@ class NexuMeshManager(private val context: Context, private val nickname: String
                                             db.nexuDao().insertMessage(entity)
 
                                             // SOLUCIÓN: MOSTRAR NOTIFICACIÓN SI EL CHAT NO ESTÁ ABIERTO
-                                            if (isForMe && P2PManager.activeChatIdentifier != senderName) {
+                                            if (P2PManager.activeChatIdentifier != senderName) {
                                                 mostrarNotificacionMensaje(context, senderName, textoToSave, false)
                                             }
                                         }
                                     } catch(e: Exception) {}
                                 }
 
-                                if (isForMe) {
-                                    val cleanPayload = Payload.fromBytes(realContent.toByteArray(Charsets.UTF_8))
+                                if (isForMe && contenidoParaMi != null) {
+                                    val cleanPayload = Payload.fromBytes(contenidoParaMi.toByteArray(Charsets.UTF_8))
                                     incomingPayloadMap[payload.id] = cleanPayload.id
                                     P2PManager.payloadCallback.onPayloadReceived(senderName, cleanPayload)
                                 } else if (ttl > 0) {
@@ -191,6 +215,13 @@ class NexuMeshManager(private val context: Context, private val nickname: String
                                         val group = db.nexuDao().getGroup(groupId)
                                         val isMyGroup = group != null
 
+                                        // Cifrado de grupo: clave AES compartida (ver GroupManager). Un
+                                        // dispositivo que no es miembro (group == null) nunca tiene esta
+                                        // clave, así que no puede leer el contenido, solo reenviarlo.
+                                        val contenidoDeGrupo = if (isMyGroup) {
+                                            CryptoManager.decryptGroupContent(group?.encryptionKeyB64, realContent) ?: realContent
+                                        } else realContent
+
                                         // SOLUCIÓN: ENVIAR ACK INMEDIATAMENTE A GRUPOS
                                         if (msgId != 0L && isMyGroup) {
                                             val ackPayload = Payload.fromBytes("ACK:$msgId".toByteArray(Charsets.UTF_8))
@@ -202,9 +233,9 @@ class NexuMeshManager(private val context: Context, private val nickname: String
 
                                         if (isMyGroup) {
                                             var textoToSave: String? = null
-                                            if (realContent.startsWith("TXT:")) textoToSave = realContent.substringAfter("TXT:").substringAfter(":")
+                                            if (contenidoDeGrupo.startsWith("TXT:")) textoToSave = contenidoDeGrupo.substringAfter("TXT:").substringAfter(":")
 
-                                            if (textoToSave != null && !realContent.contains("SYS:")) {
+                                            if (textoToSave != null && !contenidoDeGrupo.contains("SYS:")) {
                                                 val entity = MessageEntity(
                                                     msgId = msgId,
                                                     localUserId = Prefs(context).getUserProfile().id,
@@ -227,7 +258,7 @@ class NexuMeshManager(private val context: Context, private val nickname: String
                                             }
                                         }
 
-                                        val cleanPayload = Payload.fromBytes("GRP:$groupId:$senderId:$senderName:$realContent".toByteArray(Charsets.UTF_8))
+                                        val cleanPayload = Payload.fromBytes("GRP:$groupId:$senderId:$senderName:$contenidoDeGrupo".toByteArray(Charsets.UTF_8))
                                         incomingPayloadMap[payload.id] = cleanPayload.id
                                         P2PManager.payloadCallback.onPayloadReceived(endpointId, cleanPayload)
 
@@ -268,7 +299,10 @@ class NexuMeshManager(private val context: Context, private val nickname: String
         fun enviarMensajeMesh(context: Context, senderId: String, senderName: String, targetId: String, msgId: Long, mensajeRaw: String) {
             if (msgId != 0L) seenMessagesCache.add(msgId)
             val ttl = 4
-            val meshPacket = "MESH|$msgId|$targetId|$senderId|$senderName|$ttl|$mensajeRaw"
+            // Cifrado E2E: el contenido se cifra para el DESTINATARIO real (targetId), no para el
+            // vecino directo que lo reenvíe, así que un nodo que solo reenvía nunca puede leerlo.
+            val contenidoCifrado = CryptoManager.encryptFor(context, targetId, mensajeRaw)
+            val meshPacket = "MESH|$msgId|$targetId|$senderId|$senderName|$ttl|$contenidoCifrado"
             val payload = Payload.fromBytes(meshPacket.toByteArray(Charsets.UTF_8))
 
             P2PManager.outgoingPayloadsTracker[payload.id] = msgId
@@ -279,10 +313,12 @@ class NexuMeshManager(private val context: Context, private val nickname: String
             }
         }
 
-        fun enviarMensajeGrupoMesh(context: Context, senderId: String, senderName: String, groupId: String, msgId: Long, mensajeRaw: String) {
+        fun enviarMensajeGrupoMesh(context: Context, senderId: String, senderName: String, groupId: String, msgId: Long, mensajeRaw: String, groupKeyB64: String? = null) {
             if (msgId != 0L) seenMessagesCache.add(msgId)
             val ttl = 4
-            val meshPacket = "GMESH|$msgId|$groupId|$senderId|$senderName|$ttl|$mensajeRaw"
+            // Cifrado de grupo: clave AES simétrica compartida por los miembros (ver GroupManager).
+            val contenidoCifrado = CryptoManager.encryptGroupContent(groupKeyB64, mensajeRaw)
+            val meshPacket = "GMESH|$msgId|$groupId|$senderId|$senderName|$ttl|$contenidoCifrado"
             val payload = Payload.fromBytes(meshPacket.toByteArray(Charsets.UTF_8))
 
             P2PManager.outgoingPayloadsTracker[payload.id] = msgId
@@ -324,10 +360,12 @@ class NexuMeshManager(private val context: Context, private val nickname: String
                         P2PManager.currentEndpointName = nombreReal
                     }
                     P2PManager.inicializarChatSiNoExiste(context, endpointId, nombreReal)
+                    P2PManager.notificarEventoConexionEnChat(context, nombreReal, conectado = true)
                 }
                 // Si la conexión se establece sin tener HomeActivity abierta (p. ej. desde el
                 // servicio en segundo plano), nadie más dispara el intercambio de perfil/foto.
                 P2PManager.sendProfileHandshake(endpointId, Prefs(context).getUserProfile(), context)
+                compartirLlavePublica(context, endpointId)
                 iniciarPingPeriodico(endpointId)
                 P2PManager.reenviarMensajesPendientesGlobal(context)
             } else {
@@ -337,9 +375,11 @@ class NexuMeshManager(private val context: Context, private val nickname: String
         }
         override fun onDisconnected(endpointId: String) {
             detenerPingPeriodico()
+            val nombreDesconectado = endpointNames[endpointId]
             connectedEndpoints.remove(endpointId)
             endpointNames.remove(endpointId)
             P2PManager.connectedNames.remove(endpointId)
+            if (nombreDesconectado != null) P2PManager.notificarEventoConexionEnChat(context, nombreDesconectado, conectado = false)
             if (P2PManager.currentEndpointId == endpointId) {
                 P2PManager.currentEndpointId = null
                 P2PManager.currentEndpointName = null
@@ -358,10 +398,22 @@ class NexuMeshManager(private val context: Context, private val nickname: String
         pingRunnable = object : Runnable {
             override fun run() {
                 medirLatencia(endpointId)
+                enviarNivelBateria(endpointId)
                 pingHandler.postDelayed(this, 3000)
             }
         }
         pingHandler.post(pingRunnable!!)
+    }
+
+    // Indicador de batería del emisor: en vez de meterlo en el protocolo MESH/TXT (ya frágil y
+    // usado por mensajes, comandos de grupo y sincronización), viaja como un broadcast liviano
+    // aparte, igual que PING/PONG, y se muestra en el encabezado del chat.
+    private fun enviarNivelBateria(endpointId: String) {
+        try {
+            val bm = context.getSystemService(Context.BATTERY_SERVICE) as? android.os.BatteryManager ?: return
+            val pct = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (pct in 0..100) enviarDatos(endpointId, "BATT:$pct")
+        } catch (e: Exception) {}
     }
 
     private fun detenerPingPeriodico() {

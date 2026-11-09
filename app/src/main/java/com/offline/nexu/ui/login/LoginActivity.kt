@@ -1,9 +1,7 @@
 package com.offline.nexu.ui.login
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
@@ -23,7 +21,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.offline.nexu.R
 import com.offline.nexu.data.local.Prefs
@@ -54,7 +51,6 @@ class LoginActivity : AppCompatActivity() {
 
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        checkAndRequestPermissions()
 
         actualizarBotonCuentasGuardadas()
 
@@ -296,19 +292,6 @@ class LoginActivity : AppCompatActivity() {
             .setPositiveButton("Ir a Ajustes") { _, _ -> startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
             .setCancelable(false)
             .show()
-    }
-
-    private fun checkAndRequestPermissions() {
-        val list = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            list.add(Manifest.permission.BLUETOOTH_SCAN)
-            list.add(Manifest.permission.BLUETOOTH_ADVERTISE)
-            list.add(Manifest.permission.BLUETOOTH_CONNECT)
-        }
-        list.add(Manifest.permission.ACCESS_FINE_LOCATION)
-
-        val missing = list.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-        if (missing.isNotEmpty()) ActivityCompat.requestPermissions(this, missing.toTypedArray(), 100)
     }
 
     private fun goToHome() {

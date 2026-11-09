@@ -51,10 +51,3 @@ Para probar la conectividad P2P real se necesitan **al menos 2 teléfonos Androi
 3. Cuando aparezca el otro nodo en el radar, tocarlo y confirmar la solicitud de conexión en el otro dispositivo.
 4. Enviar mensajes, imágenes o crear un grupo desde la pantalla de **Chats**.
 5. Alejar o apagar Bluetooth en un dispositivo para comprobar que el historial se mantiene.
-
----
-
-## 3. Evidencia en video
-Como respaldo para la revisión, el equipo puede presentar la app **en vivo en clase** o adjuntar un **video** de la prueba con dispositivos reales:
-
-* Video de demostración: _(agregar enlace aquí)_

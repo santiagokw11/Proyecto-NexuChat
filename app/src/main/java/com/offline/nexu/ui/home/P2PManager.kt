@@ -43,6 +43,10 @@ object P2PManager {
 
     val connectedNames = mutableMapOf<String, String>()
 
+    // Último % de batería reportado por cada contacto, keyed por nombre. Se actualiza cada
+    // 3s vía el broadcast "BATT:" (ver NexuMeshManager.enviarNivelBateria).
+    val contactBatteryLevels = mutableMapOf<String, Int>()
+
     var onMessageReceivedListener: ((Long, String, Uri?) -> Unit)? = null
     var onMessageSentListener: ((Long) -> Unit)? = null
     var onMessageFailedListener: ((Long) -> Unit)? = null
@@ -150,6 +154,7 @@ object P2PManager {
                 for (targetId in pendingEndpoints) {
                     val historial = db.nexuDao().getMessagesForUserSync(targetId, myLocalUserId)
                     val pendientes = historial.filter { it.isMine && (it.status == 0 || it.status == 1 || it.status == -2) }
+                    val groupKeyB64 = if (pendientes.any { it.isGroup }) db.nexuDao().getGroup(targetId)?.encryptionKeyB64 else null
 
                     if (pendientes.isNotEmpty()) {
                         for (msg in pendientes) {
@@ -170,7 +175,7 @@ object P2PManager {
                                     val header = "$headerType:${filePayload.id}:$msgId:$text"
 
                                     if (isGroupMsg) {
-                                        NexuMeshManager.enviarMensajeGrupoMesh(ctx, myLocalUserId, myName, targetId, msgId, header)
+                                        NexuMeshManager.enviarMensajeGrupoMesh(ctx, myLocalUserId, myName, targetId, msgId, header, groupKeyB64)
                                     } else {
                                         NexuMeshManager.enviarMensajeMesh(ctx, myLocalUserId, myName, targetId, msgId, header)
                                     }
@@ -181,7 +186,7 @@ object P2PManager {
                             } else if (text.isNotEmpty()) {
                                 val header = "TXT:$msgId:$text"
                                 if (isGroupMsg) {
-                                    NexuMeshManager.enviarMensajeGrupoMesh(ctx, myLocalUserId, myName, targetId, msgId, header)
+                                    NexuMeshManager.enviarMensajeGrupoMesh(ctx, myLocalUserId, myName, targetId, msgId, header, groupKeyB64)
                                 } else {
                                     NexuMeshManager.enviarMensajeMesh(ctx, myLocalUserId, myName, targetId, msgId, header)
                                 }
@@ -412,6 +417,42 @@ object P2PManager {
                 expectedChatImages.remove(update.payloadId)
                 incomingFilePayloads.remove(update.payloadId)
             }
+        }
+    }
+
+    // Alerta de conexión/desconexión DENTRO del chat: evento local, no viaja por la red. Reutiliza
+    // el mismo mecanismo de "mensaje de sistema" (status 99) que ya usan zumbidos y eventos de
+    // grupo, así que se ve y persiste igual, y aparece en vivo si el chat de ese contacto está abierto.
+    fun notificarEventoConexionEnChat(ctx: Context, peerName: String, conectado: Boolean) {
+        val prefs = Prefs(ctx)
+        val localUserId = prefs.getUserProfile().id
+        if (localUserId.isEmpty()) return
+        val texto = if (conectado) "🟢 $peerName se conectó" else "🔴 Se perdió la conexión con $peerName"
+        val msgId = MsgIdGenerator.next()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val db = AppDatabase.getDatabase(ctx)
+                val entity = MessageEntity(
+                    msgId = msgId,
+                    localUserId = localUserId,
+                    endpointId = peerName,
+                    originalSender = peerName,
+                    isGroup = false,
+                    text = texto,
+                    imagePath = null,
+                    isMine = false,
+                    status = 99,
+                    timestamp = System.currentTimeMillis()
+                )
+                db.nexuDao().insertMessage(entity)
+
+                withContext(Dispatchers.Main) {
+                    if (activeChatIdentifier == peerName) {
+                        onMessageReceivedListener?.invoke(msgId, "SYS:EVENT:$texto", null)
+                    }
+                }
+            } catch (e: Exception) {}
         }
     }
 
