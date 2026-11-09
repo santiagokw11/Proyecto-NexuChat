@@ -3,6 +3,7 @@ package com.offline.nexu.utils
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.util.TypedValue
 import com.offline.nexu.data.local.Prefs
 
 object ThemeUtils {
@@ -27,9 +28,10 @@ object ThemeUtils {
         return ColorStateList(states, colors)
     }
 
+    // Resuelve el fondo seleccionable nativo (ripple effect) del tema
     fun getSelectableItemBackground(context: Context): Int {
-        val typedValue = android.util.TypedValue()
-        context.theme.resolveAttribute(android.R.attr.selectableItemBackground, typedValue, true)
-        return typedValue.resourceId
+        val outValue = TypedValue()
+        context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+        return outValue.resourceId
     }
 }

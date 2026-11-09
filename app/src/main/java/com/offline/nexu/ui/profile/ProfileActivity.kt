@@ -1,26 +1,29 @@
 package com.offline.nexu.ui.profile
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.text.InputType
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.google.android.gms.nearby.Nearby
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.offline.nexu.R
 import com.offline.nexu.data.local.Prefs
 import com.offline.nexu.data.model.UserProfile
+import com.offline.nexu.ui.chat.helpers.AttachmentHelper
 import com.offline.nexu.ui.home.HomeActivity
 import com.offline.nexu.ui.home.P2PManager
 import com.offline.nexu.ui.login.LoginActivity
@@ -47,12 +50,20 @@ class ProfileActivity : AppCompatActivity() {
     private lateinit var btnSave: Button
     private lateinit var bottomNavigation: BottomNavigationView
 
-    private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) {
-            selectedAvatarUri = uri
-            avatarImageView.setImageURI(uri)
-            avatarImageView.clipToOutline = true
+    // --- NUEVO: GALERÍA PERSONALIZADA EN VEZ DE GOOGLE PHOTOS ---
+    private val requestGalleryPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        val granted = permissions.entries.all { it.value }
+        if (granted) {
+            AttachmentHelper.openCustomGallery(this, layoutInflater) { uri -> procesarUriAvatar(uri) }
+        } else {
+            Toast.makeText(this, "Permiso de galería denegado", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun procesarUriAvatar(uri: Uri) {
+        selectedAvatarUri = uri
+        avatarImageView.setImageURI(uri)
+        avatarImageView.clipToOutline = true
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,8 +110,14 @@ class ProfileActivity : AppCompatActivity() {
             }
         }
 
+        // --- LANZAR GALERÍA PERSONALIZADA ---
         avatarImageView.setOnClickListener {
-            pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            val p = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) arrayOf(Manifest.permission.READ_MEDIA_IMAGES) else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+            if (ContextCompat.checkSelfPermission(this, p[0]) != PackageManager.PERMISSION_GRANTED) {
+                requestGalleryPermissionLauncher.launch(p)
+            } else {
+                AttachmentHelper.openCustomGallery(this, layoutInflater) { uri -> procesarUriAvatar(uri) }
+            }
         }
 
         btnSave.setOnClickListener {
@@ -145,24 +162,34 @@ class ProfileActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
+        // --- NUEVO DIALOGO FLOTANTE DE CONTRASEÑA ---
         findViewById<Button>(R.id.btnChangePassword)?.setOnClickListener {
-            val input = EditText(this)
-            input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            input.hint = "Nueva Contraseña"
-            input.setPadding(40,40,40,40)
+            val view = layoutInflater.inflate(R.layout.dialog_change_password, null)
+            val dialog = AlertDialog.Builder(this).setView(view).create()
+            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
-            AlertDialog.Builder(this)
-                .setTitle("Cambiar Contraseña")
-                .setView(input)
-                .setPositiveButton("Guardar") { _, _ ->
-                    val newPass = input.text.toString()
-                    if (newPass.isNotEmpty()) {
-                        prefs.updatePassword(newPass)
-                        Toast.makeText(this, "Contraseña actualizada", Toast.LENGTH_SHORT).show()
-                    }
+            val tvTitle = view.findViewById<TextView>(R.id.tvPasswordTitle)
+            val etNewPass = view.findViewById<EditText>(R.id.etNewPassword)
+            val btnCancel = view.findViewById<Button>(R.id.btnCancelPassword)
+            val btnConfirm = view.findViewById<Button>(R.id.btnConfirmPassword)
+
+            // Aplicamos el aura actual a los botones del popup
+            val colorInt = Color.parseColor(currentColorHex)
+            tvTitle.setTextColor(colorInt)
+            btnConfirm.backgroundTintList = ColorStateList.valueOf(colorInt)
+
+            btnCancel.setOnClickListener { dialog.dismiss() }
+            btnConfirm.setOnClickListener {
+                val newPass = etNewPass.text.toString()
+                if (newPass.isNotEmpty()) {
+                    prefs.updatePassword(newPass)
+                    Toast.makeText(this, "Contraseña actualizada", Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                } else {
+                    Toast.makeText(this, "Ingresa una contraseña válida", Toast.LENGTH_SHORT).show()
                 }
-                .setNegativeButton("Cancelar", null)
-                .show()
+            }
+            dialog.show()
         }
 
         bottomNavigation.setOnItemSelectedListener { item ->
@@ -187,7 +214,6 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    // ¡NUEVO!: Garantiza que al regresar a esta pantalla, recupere el Aura seleccionada y fije el icono correcto
     override fun onResume() {
         super.onResume()
         bottomNavigation.selectedItemId = R.id.nav_profile
@@ -195,7 +221,6 @@ class ProfileActivity : AppCompatActivity() {
         seleccionarColorPorHex(currentProfile.colorHex)
     }
 
-    // ¡NUEVO!: Mata cualquier animación del sistema al cambiar de pestaña
     override fun onPause() {
         super.onPause()
         overridePendingTransition(0, 0)

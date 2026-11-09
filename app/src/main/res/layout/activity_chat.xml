@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="?android:colorBackground">
+    android:background="@color/background_main">
 
     <LinearLayout
         android:id="@+id/llChatHeaderInfo"
@@ -14,7 +14,7 @@
         android:padding="12dp"
         android:gravity="center_vertical"
         android:elevation="4dp"
-        android:background="?android:colorBackground">
+        android:background="@color/background_main">
 
         <ImageView
             android:id="@+id/btnBack"
@@ -59,7 +59,7 @@
                 android:textStyle="bold"
                 android:maxLines="1"
                 android:ellipsize="end"
-                android:textColor="@color/text_primary"/>
+                android:textColor="?android:attr/textColorPrimary"/>
 
             <TextView
                 android:id="@+id/tvStatus"
@@ -89,6 +89,98 @@
             android:textColor="@color/text_secondary"/>
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/llSearchBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:visibility="gone"
+        android:background="@color/surface_card"
+        android:gravity="center_vertical"
+        android:elevation="2dp">
+
+        <EditText
+            android:id="@+id/etSearchMessages"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:hint="Buscar en esta conversación..."
+            android:background="@drawable/bg_search_box"
+            android:padding="10dp"
+            android:textSize="14sp"/>
+
+        <ImageView
+            android:id="@+id/btnCloseSearch"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:padding="4dp"
+            android:src="@drawable/ic_close"
+            app:tint="?android:attr/textColorPrimary"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/llMessageSelectionHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        android:visibility="gone"
+        android:elevation="6dp"
+        android:background="@color/background_main">
+
+        <ImageView
+            android:id="@+id/btnCloseMsgSelection"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_close"
+            app:tint="?android:attr/textColorPrimary"/>
+
+        <TextView
+            android:id="@+id/tvMsgSelectionCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="16dp"
+            android:text="1"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary"/>
+
+        <ImageView
+            android:id="@+id/btnCopySelectedMsgs"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="4dp"
+            android:layout_marginEnd="16dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_copy"
+            app:tint="?android:attr/textColorPrimary"/>
+
+        <ImageView
+            android:id="@+id/btnForwardSelectedMsgs"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="4dp"
+            android:layout_marginEnd="16dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_forward"
+            app:tint="?android:attr/textColorPrimary"/>
+
+        <ImageView
+            android:id="@+id/btnDeleteSelectedMsgs"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_delete"
+            app:tint="#F44336"/>
+    </LinearLayout>
+
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
@@ -101,6 +193,23 @@
         android:layout_weight="1"
         android:padding="8dp"
         android:clipToPadding="false"/>
+
+    <FrameLayout
+        android:id="@+id/flAttachmentMenu"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone">
+        <include layout="@layout/layout_attachment_menu" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/flEmojiPicker"
+        android:layout_width="match_parent"
+        android:layout_height="250dp"
+        android:background="@color/background_main"
+        android:visibility="gone">
+        <include layout="@layout/layout_emoji_picker" />
+    </FrameLayout>
 
     <androidx.cardview.widget.CardView
         android:id="@+id/cvImagePreview"
@@ -127,47 +236,107 @@
             app:tint="@android:color/white"/>
     </androidx.cardview.widget.CardView>
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="8dp"
-        android:gravity="center_vertical"
-        android:background="?android:colorBackground">
+        android:layout_height="wrap_content">
 
-        <ImageView
-            android:id="@+id/btnAttach"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="8dp"
-            android:src="@android:drawable/ic_menu_gallery"/>
-
-        <EditText
-            android:id="@+id/etMessage"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:id="@+id/llInputLayout"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="Escribe un mensaje..."
-            android:background="@drawable/edittext_rounded"
-            android:padding="12dp"
-            android:maxLines="4"
-            android:inputType="textMultiLine|textCapSentences"/>
-
-        <ImageView
-            android:id="@+id/btnNudge"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:orientation="horizontal"
             android:padding="8dp"
-            android:src="@android:drawable/ic_popup_reminder"/>
+            android:gravity="center_vertical"
+            android:background="@color/background_main">
 
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
-            android:id="@+id/btnSend"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:src="@android:drawable/ic_menu_send"
-            app:tint="@android:color/white"
-            app:fabSize="mini"
-            app:elevation="0dp"/>
-    </LinearLayout>
+            <ImageView
+                android:id="@+id/btnAttach"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_clip"/>
+
+            <EditText
+                android:id="@+id/etMessage"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Escribe un mensaje..."
+                android:background="@drawable/edittext_rounded"
+                android:padding="12dp"
+                android:maxLines="4"
+                android:inputType="textMultiLine|textCapSentences"/>
+
+            <LinearLayout
+                android:id="@+id/llRecordingUI"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone"
+                android:padding="12dp">
+                <ImageView
+                    android:id="@+id/ivRecordingBlink"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:src="@drawable/circle_background"
+                    app:tint="#F44336"/>
+                <TextView
+                    android:id="@+id/tvRecordingTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="00:00"
+                    android:textStyle="bold"
+                    android:textColor="?android:attr/textColorPrimary"/>
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="16dp"
+                    android:text="&lt; Desliza cancelar"
+                    android:textColor="@color/text_secondary"
+                    android:gravity="end"/>
+
+                <ImageView
+                    android:id="@+id/btnCancelRecording"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="8dp"
+                    android:padding="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_close"
+                    app:tint="#F44336"
+                    android:visibility="gone"/>
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/btnEmoji"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_emoji"/>
+
+            <ImageView
+                android:id="@+id/btnNudge"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_bell"/>
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/btnSend"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:src="@android:drawable/ic_btn_speak_now"
+                app:tint="@android:color/white"
+                app:fabSize="mini"
+                app:elevation="0dp"/>
+        </LinearLayout>
+
+    </FrameLayout>
 </LinearLayout>

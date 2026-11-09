@@ -46,7 +46,13 @@ interface NexuDao {
     @Query("DELETE FROM messages WHERE endpointId IN (SELECT groupId FROM groups WHERE expirationTime IS NOT NULL AND expirationTime <= :currentTime)")
     fun deleteMessagesOfExpiredGroups(currentTime: Long)
 
-    // NUEVO: Permite sumar tiempo de vida al grupo
     @Query("UPDATE groups SET expirationTime = :newTime WHERE groupId = :groupId")
     fun updateGroupExpiration(groupId: String, newTime: Long)
+
+    // NUEVO: Métodos para conteo y lectura de mensajes
+    @Query("SELECT COUNT(*) FROM messages WHERE endpointId = :endpointId AND localUserId = :localUserId AND isMine = 0 AND status = 0")
+    fun getUnreadCount(endpointId: String, localUserId: String): Int
+
+    @Query("UPDATE messages SET status = 3 WHERE endpointId = :endpointId AND localUserId = :localUserId AND isMine = 0 AND status = 0")
+    fun markAsRead(endpointId: String, localUserId: String)
 }

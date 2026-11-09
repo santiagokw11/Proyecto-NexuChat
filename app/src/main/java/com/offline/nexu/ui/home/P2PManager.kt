@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.Payload
@@ -18,13 +19,16 @@ import com.offline.nexu.ConnectionService
 import com.offline.nexu.R
 import com.offline.nexu.data.local.Prefs
 import com.offline.nexu.data.local.db.AppDatabase
-import com.offline.nexu.data.local.db.GroupEntity
 import com.offline.nexu.data.local.db.MessageEntity
 import com.offline.nexu.data.model.UserProfile
 import com.offline.nexu.ui.chat.ChatActivity
+import com.offline.nexu.data.network.NexuMeshManager
+import com.offline.nexu.ui.chat.group.GroupManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
@@ -36,22 +40,24 @@ object P2PManager {
 
     var activeChatIdentifier: String? = null
 
+    val connectedNames = mutableMapOf<String, String>()
+
     var onMessageReceivedListener: ((Long, String, Uri?) -> Unit)? = null
     var onMessageSentListener: ((Long) -> Unit)? = null
+    var onMessageFailedListener: ((Long) -> Unit)? = null
     var onAckReceivedListener: ((Long) -> Unit)? = null
     var onDistanceEstimatedListener: ((String) -> Unit)? = null
     var onProfileReceivedListener: ((String, String, String) -> Unit)? = null
     var onPayloadProgress: ((Long, Int) -> Unit)? = null
 
+    data class PendingFileInfo(val msgId: Long, val content: String, val type: String, val senderName: String, val isGroup: Boolean = false, val groupId: String? = null)
+
     val outgoingPayloadsTracker = mutableMapOf<Long, Long>()
     private val incomingFilePayloads = mutableMapOf<Long, Payload>()
     private val expectedProfileImages = mutableMapOf<Long, String>()
-    private val expectedGroupAvatars = mutableMapOf<Long, String>()
-    private val expectedChatImages = mutableMapOf<Long, Triple<Long, String, String>>()
+    private val expectedChatImages = mutableMapOf<Long, PendingFileInfo>()
 
-    fun setExpectedGroupAvatar(payloadId: Long, groupId: String) {
-        expectedGroupAvatars[payloadId] = groupId
-    }
+    private var isGlobalSyncing = false
 
     fun clearSession() {
         currentEndpointId = null
@@ -59,11 +65,15 @@ object P2PManager {
         outgoingPayloadsTracker.clear()
         incomingFilePayloads.clear()
         expectedProfileImages.clear()
-        expectedGroupAvatars.clear()
         expectedChatImages.clear()
+        connectedNames.clear()
 
         context?.let {
-            try { Nearby.getConnectionsClient(it).stopAllEndpoints() } catch (e: Exception) {}
+            try {
+                Nearby.getConnectionsClient(it).stopAllEndpoints()
+                Nearby.getConnectionsClient(it).stopDiscovery()
+                Nearby.getConnectionsClient(it).stopAdvertising()
+            } catch (e: Exception) {}
         }
     }
 
@@ -77,6 +87,114 @@ object P2PManager {
             val serviceIntent = Intent(ctx, ConnectionService::class.java)
             ctx.stopService(serviceIntent)
         } catch (e: Exception) {}
+    }
+
+    fun inicializarChatSiNoExiste(ctx: Context, endpointId: String, endpointName: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val db = AppDatabase.getDatabase(ctx)
+                val prefs = Prefs(ctx)
+                val myLocalUserId = prefs.getUserProfile().id
+                val exists = db.nexuDao().getRecentChats(myLocalUserId).any { it.endpointId == endpointId }
+
+                if (!exists) {
+                    val dummyMsg = MessageEntity(
+                        msgId = System.currentTimeMillis(),
+                        localUserId = myLocalUserId,
+                        endpointId = endpointId,
+                        originalSender = endpointName,
+                        isGroup = false,
+                        text = "Chat inicializado",
+                        imagePath = null,
+                        isMine = false,
+                        status = -1,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    db.nexuDao().insertMessage(dummyMsg)
+
+                    withContext(Dispatchers.Main) {
+                        val intent = Intent("com.offline.nexu.ACTION_UPDATE_CHAT_LIST")
+                        intent.setPackage(ctx.packageName)
+                        ctx.sendBroadcast(intent)
+                    }
+                }
+            } catch (e: Exception) {}
+        }
+    }
+
+    fun reenviarMensajesPendientesGlobal(ctx: Context) {
+        if (isGlobalSyncing) return
+        isGlobalSyncing = true
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val db = AppDatabase.getDatabase(ctx)
+                val prefs = Prefs(ctx)
+                val myLocalUserId = prefs.getUserProfile().id
+                val myName = prefs.getUserProfile().name
+                val recentChats = db.nexuDao().getRecentChats(myLocalUserId)
+
+                val eps = NexuMeshManager.connectedEndpoints.toList()
+                if (eps.isEmpty()) { isGlobalSyncing = false; return@launch }
+
+                for (chat in recentChats) {
+                    val targetId = chat.endpointId
+
+                    if (chat.isGroup) {
+                        val group = db.nexuDao().getGroup(targetId)
+                        val members = group?.members?.split(",")?.map{it.trim()} ?: emptyList()
+                        val anyConnected = members.any { m -> m != myLocalUserId && (connectedNames.containsValue(m) || NexuMeshManager.connectedEndpoints.contains(m)) }
+                        if (!anyConnected) continue
+                    } else {
+                        if (!connectedNames.containsValue(targetId) && !NexuMeshManager.connectedEndpoints.contains(targetId)) continue
+                    }
+
+                    val historial = db.nexuDao().getMessagesForUserSync(targetId, myLocalUserId)
+                    val pendientes = historial.filter { it.isMine && (it.status == 0 || it.status == 1 || it.status == -2) }
+
+                    if (pendientes.isNotEmpty()) {
+                        for (msg in pendientes) {
+                            val text = msg.text ?: ""
+                            val msgId = msg.msgId
+                            val isGroupMsg = msg.isGroup
+
+                            if (msg.imagePath != null) {
+                                val file = File(Uri.parse(msg.imagePath).path ?: "")
+                                if (file.exists()) {
+                                    val filePayload = Payload.fromFile(file)
+                                    val headerType = when {
+                                        msg.imagePath.contains("DOC") || msg.imagePath.endsWith(".pdf") -> "DOC"
+                                        msg.imagePath.contains("VID") || msg.imagePath.endsWith(".mp4") -> "VID"
+                                        msg.imagePath.contains("AUD") || msg.imagePath.endsWith(".ogg") || msg.imagePath.endsWith(".m4a") -> "AUD"
+                                        else -> "IMG"
+                                    }
+                                    val header = "$headerType:${filePayload.id}:$msgId:$text"
+
+                                    if (isGroupMsg) {
+                                        NexuMeshManager.enviarMensajeGrupoMesh(ctx, myLocalUserId, myName, targetId, msgId, header)
+                                    } else {
+                                        NexuMeshManager.enviarMensajeMesh(ctx, myLocalUserId, myName, targetId, msgId, header)
+                                    }
+                                    outgoingPayloadsTracker[filePayload.id] = msgId
+                                    delay(500)
+                                    Nearby.getConnectionsClient(ctx).sendPayload(eps, filePayload)
+                                }
+                            } else if (text.isNotEmpty()) {
+                                val header = "TXT:$msgId:$text"
+                                if (isGroupMsg) {
+                                    NexuMeshManager.enviarMensajeGrupoMesh(ctx, myLocalUserId, myName, targetId, msgId, header)
+                                } else {
+                                    NexuMeshManager.enviarMensajeMesh(ctx, myLocalUserId, myName, targetId, msgId, header)
+                                }
+                            }
+                            delay(400)
+                        }
+                    }
+                }
+            } catch (e: Exception) {}
+            delay(2000)
+            isGlobalSyncing = false
+        }
     }
 
     fun sendProfileHandshake(endpointId: String, profile: UserProfile, ctx: Context) {
@@ -97,84 +215,102 @@ object P2PManager {
         }
     }
 
+    fun setExpectedGroupAvatar(payloadId: Long, groupId: String) {
+        expectedChatImages[payloadId] = PendingFileInfo(0L, "GRP_AVATAR:$groupId", "IMG", "", true, groupId)
+    }
+
     val payloadCallback = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             when (payload.type) {
                 Payload.Type.BYTES -> {
                     val data = String(payload.asBytes()!!, Charsets.UTF_8)
+
                     if (data.startsWith("PING:") || data.startsWith("PONG:")) {
-                        // NexuMeshManager
+                        // Latency pings
+                    } else if (data.startsWith("SYS:GROUP_CREATE|")) {
+                        context?.let { GroupManager.handleGroupCreateCommand(it, data, endpointId) }
+                        sendAck(endpointId, System.currentTimeMillis())
+                    } else if (data.startsWith("SYS:GROUP_UPDATE|")) {
+                        context?.let { GroupManager.handleGroupUpdateCommand(it, data) }
+                        sendAck(endpointId, System.currentTimeMillis())
                     } else if (data.startsWith("ACK:")) {
                         val msgId = data.substringAfter("ACK:").toLongOrNull()
-                        if (msgId != null) onAckReceivedListener?.invoke(msgId)
-                    } else if (data.startsWith("TXT:")) {
-                        val parts = data.split(":", limit = 3)
-                        if (parts.size == 3) {
-                            val msgId = parts[1].toLong()
-                            val text = parts[2]
+                        if (msgId != null) {
+                            CoroutineScope(Dispatchers.IO).launch {
+                                context?.let { ctx -> AppDatabase.getDatabase(ctx).nexuDao().updateStatus(msgId, 2) }
+                            }
+                            onAckReceivedListener?.invoke(msgId)
+                        }
+                    } else if (data.startsWith("TXT:") || data.startsWith("EPH:")) {
+                        val isEph = data.startsWith("EPH:")
+                        val parts = data.split(":", limit = if (isEph) 4 else 3)
 
-                            // LÓGICA PARA CREACIÓN Y EDICIÓN DE GRUPOS
-                            if (text.startsWith("SYS:GROUP_CREATE|") || text.startsWith("SYS:GROUP_UPDATE|")) {
-                                val isUpdate = text.startsWith("SYS:GROUP_UPDATE|")
-                                val sysParts = text.split("|")
-                                if (sysParts.size >= 4) {
-                                    val groupId = sysParts[1]
-                                    val groupName = sysParts[2]
-                                    val members = sysParts[3]
-                                    val avatarPayloadId = if (sysParts.size >= 5) sysParts[4].toLongOrNull() else null
+                        if (parts.size >= 3) {
+                            val msgIdParsed = parts[1].toLongOrNull() ?: 0L
+                            val finalMsgId = if (msgIdParsed == 0L) System.currentTimeMillis() else msgIdParsed
+                            val content = if (isEph) parts[3] else parts[2]
+                            val duration = if (isEph) parts[2].toLongOrNull() ?: 0L else 0L
 
-                                    context?.let { ctx ->
-                                        val localUserId = Prefs(ctx).getUserProfile().id
-                                        val senderName = currentEndpointName ?: "Sistema"
+                            if (content.startsWith("SYS:GROUP_CREATE")) {
+                                context?.let { GroupManager.handleGroupCreateCommand(it, content, endpointId) }
+                                if (finalMsgId != 0L) sendAck(endpointId, finalMsgId)
+                            } else if (content.startsWith("SYS:GROUP_UPDATE")) {
+                                context?.let { GroupManager.handleGroupUpdateCommand(it, content) }
+                                if (finalMsgId != 0L) sendAck(endpointId, finalMsgId)
+                            } else if (content.startsWith("SYS:ADD_TIME:")) {
+                                onMessageReceivedListener?.invoke(finalMsgId, data, null)
+                            } else if (content == "SYS:TYPING:1" || content == "SYS:TYPING:0") {
+                                onMessageReceivedListener?.invoke(finalMsgId, data, null)
+                            } else {
+                                val senderName = connectedNames[endpointId] ?: currentEndpointName ?: endpointId
+                                procesarMensajeEntrante(senderName, finalMsgId, content, null, isGroup = false, originalSender = senderName, duration = duration)
+                                if (finalMsgId != 0L) sendAck(endpointId, finalMsgId)
+                            }
+                        }
+                    } else if (data.startsWith("GRP:")) {
+                        val parts = data.split(":", limit = 5)
+                        if (parts.size >= 5) {
+                            val groupId = parts[1]
+                            val senderId = parts[2]
+                            val senderName = parts[3]
+                            val realContent = parts[4]
 
-                                        CoroutineScope(Dispatchers.IO).launch {
-                                            val dao = AppDatabase.getDatabase(ctx).nexuDao()
-                                            val existingGroup = dao.getGroup(groupId)
+                            if (realContent.startsWith("IMG:") || realContent.startsWith("VID:") || realContent.startsWith("DOC:") || realContent.startsWith("AUD:")) {
+                                val subParts = realContent.split(":", limit = 4)
+                                if (subParts.size == 4) {
+                                    expectedChatImages[subParts[1].toLong()] = PendingFileInfo(subParts[2].toLong(), subParts[3], subParts[0], senderName, true, groupId)
+                                }
+                            } else {
+                                val isEph = realContent.startsWith("EPH:")
+                                val subParts = realContent.split(":", limit = if (isEph) 4 else 3)
 
-                                            val group = GroupEntity(
-                                                groupId = groupId,
-                                                groupName = groupName,
-                                                groupAvatar = existingGroup?.groupAvatar, // Mantiene el anterior mientras descarga el nuevo
-                                                adminId = existingGroup?.adminId ?: senderName,
-                                                members = members
-                                            )
+                                if (subParts.size >= 3) {
+                                    val msgIdParsed = subParts[1].toLongOrNull() ?: 0L
+                                    val finalMsgId = if (msgIdParsed == 0L) System.currentTimeMillis() else msgIdParsed
+                                    val content = if (isEph) subParts[3] else subParts[2]
+                                    val duration = if (isEph) subParts[2].toLongOrNull() ?: 0L else 0L
 
-                                            if (avatarPayloadId != null && avatarPayloadId != 0L) {
-                                                expectedGroupAvatars[avatarPayloadId] = groupId
-                                            }
-
-                                            dao.insertGroup(group)
-
-                                            val msgText = if (isUpdate) "El grupo ha sido actualizado" else "Te han añadido al grupo '$groupName'"
-
-                                            val dummyMsg = MessageEntity(
-                                                msgId = System.currentTimeMillis(),
-                                                localUserId = localUserId,
-                                                endpointId = groupId,
-                                                originalSender = senderName,
-                                                isGroup = true,
-                                                text = msgText,
-                                                imagePath = null,
-                                                isMine = false,
-                                                status = 3,
-                                                timestamp = System.currentTimeMillis()
-                                            )
-                                            dao.insertMessage(dummyMsg)
-                                            mostrarNotificacion(ctx, groupName, msgText)
-                                        }
+                                    if (content.startsWith("SYS:GROUP_CREATE")) {
+                                        context?.let { GroupManager.handleGroupCreateCommand(it, content, endpointId) }
+                                        if (finalMsgId != 0L) sendAck(endpointId, finalMsgId)
+                                    } else if (content.startsWith("SYS:GROUP_UPDATE")) {
+                                        context?.let { GroupManager.handleGroupUpdateCommand(it, content) }
+                                        if (finalMsgId != 0L) sendAck(endpointId, finalMsgId)
+                                    } else if (content.startsWith("SYS:ADD_TIME:")) {
+                                        onMessageReceivedListener?.invoke(finalMsgId, data, null)
+                                    } else if (content == "SYS:TYPING:1" || content == "SYS:TYPING:0") {
+                                        onMessageReceivedListener?.invoke(finalMsgId, data, null)
+                                    } else {
+                                        procesarMensajeEntrante(groupId, finalMsgId, content, null, isGroup = true, originalSender = senderName, duration = duration)
+                                        if (finalMsgId != 0L) sendAck(endpointId, finalMsgId)
                                     }
                                 }
-                            } else if (text.startsWith("SYS:")) {
-                                onMessageReceivedListener?.invoke(msgId, text, null)
-                            } else {
-                                procesarMensajeEntrante(endpointId, msgId, text, null)
                             }
-                            if (msgId != 0L) sendAck(endpointId, msgId)
                         }
-                    } else if (data.startsWith("IMG:") || data.startsWith("VID:") || data.startsWith("DOC:")) {
+                    } else if (data.startsWith("IMG:") || data.startsWith("VID:") || data.startsWith("DOC:") || data.startsWith("AUD:")) {
                         val parts = data.split(":", limit = 4)
                         if (parts.size == 4) {
-                            expectedChatImages[parts[1].toLong()] = Triple(parts[2].toLong(), parts[3], parts[0])
+                            expectedChatImages[parts[1].toLong()] = PendingFileInfo(parts[2].toLong(), parts[3], parts[0], connectedNames[endpointId] ?: endpointId, false, null)
                         }
                     } else if (data.startsWith("PROFILE_EMOJI:")) {
                         val parts = data.split(":", limit = 3)
@@ -191,99 +327,174 @@ object P2PManager {
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
             if (update.status == PayloadTransferUpdate.Status.IN_PROGRESS && update.totalBytes > 0) {
                 val progress = ((update.bytesTransferred.toDouble() / update.totalBytes.toDouble()) * 100).toInt()
-                val msgId = outgoingPayloadsTracker[update.payloadId] ?: expectedChatImages[update.payloadId]?.first
+                val msgId = outgoingPayloadsTracker[update.payloadId] ?: expectedChatImages[update.payloadId]?.msgId
                 if (msgId != null) onPayloadProgress?.invoke(msgId, progress)
             }
             else if (update.status == PayloadTransferUpdate.Status.SUCCESS) {
                 if (outgoingPayloadsTracker.containsKey(update.payloadId)) {
-                    onMessageSentListener?.invoke(outgoingPayloadsTracker[update.payloadId]!!)
-                    outgoingPayloadsTracker.remove(update.payloadId)
-                }
-                if (expectedProfileImages.containsKey(update.payloadId)) {
-                    val name = expectedProfileImages[update.payloadId]!!
-                    val filePayload = incomingFilePayloads[update.payloadId]
-                    if (filePayload != null) {
-                        val uri = renameAndMoveFileSafely(filePayload, "PROFILE")
-                        if (uri != null) saveContactProfile(endpointId, name, uri.toString())
+                    val msgId = outgoingPayloadsTracker.remove(update.payloadId)!!
+                    CoroutineScope(Dispatchers.IO).launch {
+                        context?.let { ctx -> AppDatabase.getDatabase(ctx).nexuDao().updateStatus(msgId, 1) }
                     }
-                    expectedProfileImages.remove(update.payloadId)
-                    incomingFilePayloads.remove(update.payloadId)
+                    onMessageSentListener?.invoke(msgId)
                 }
-                if (expectedGroupAvatars.containsKey(update.payloadId)) {
-                    val groupId = expectedGroupAvatars[update.payloadId]!!
-                    val filePayload = incomingFilePayloads[update.payloadId]
+
+                if (expectedProfileImages.containsKey(update.payloadId)) {
+                    val name = expectedProfileImages.remove(update.payloadId)!!
+                    val filePayload = incomingFilePayloads.remove(update.payloadId)
                     if (filePayload != null) {
-                        val uri = renameAndMoveFileSafely(filePayload, "GROUP_AVATAR")
-                        if (uri != null && context != null) {
-                            CoroutineScope(Dispatchers.IO).launch {
-                                val dao = AppDatabase.getDatabase(context!!).nexuDao()
-                                val group = dao.getGroup(groupId)
-                                if (group != null) {
-                                    dao.insertGroup(group.copy(groupAvatar = uri.toString()))
-                                }
+                        CoroutineScope(Dispatchers.IO).launch {
+                            val uri = renameAndMoveFileSafely(filePayload, "PROFILE")
+                            withContext(Dispatchers.Main) {
+                                if (uri != null) saveContactProfile(endpointId, name, uri.toString())
                             }
                         }
                     }
-                    expectedGroupAvatars.remove(update.payloadId)
-                    incomingFilePayloads.remove(update.payloadId)
                 }
+
                 if (expectedChatImages.containsKey(update.payloadId)) {
-                    val msgInfo = expectedChatImages[update.payloadId]!!
-                    val filePayload = incomingFilePayloads[update.payloadId]
+                    val msgInfo = expectedChatImages.remove(update.payloadId)!!
+                    val filePayload = incomingFilePayloads.remove(update.payloadId)
+
                     if (filePayload != null) {
-                        val uri = renameAndMoveFileSafely(filePayload, msgInfo.third)
-                        procesarMensajeEntrante(endpointId, msgInfo.first, msgInfo.second, uri)
-                        sendAck(endpointId, msgInfo.first)
+                        CoroutineScope(Dispatchers.IO).launch {
+                            val uri = renameAndMoveFileSafely(filePayload, msgInfo.type)
+
+                            if (msgInfo.content.startsWith("GRP_AVATAR:")) {
+                                val groupId = msgInfo.content.substringAfter("GRP_AVATAR:")
+                                context?.let { ctx ->
+                                    val db = AppDatabase.getDatabase(ctx)
+                                    val existing = db.nexuDao().getGroup(groupId)
+                                    if (existing != null && uri != null) {
+                                        val updated = existing.copy(groupAvatar = uri.toString())
+                                        db.nexuDao().insertGroup(updated)
+                                    }
+                                }
+                            } else {
+                                val text = msgInfo.content
+
+                                if (!text.startsWith("SYS:")) {
+                                    procesarMensajeEntrante(
+                                        chatId = if (msgInfo.isGroup) msgInfo.groupId!! else msgInfo.senderName,
+                                        msgId = msgInfo.msgId,
+                                        text = text,
+                                        uri = uri,
+                                        isGroup = msgInfo.isGroup,
+                                        originalSender = msgInfo.senderName
+                                    )
+                                }
+                            }
+
+                            withContext(Dispatchers.Main) {
+                                sendAck(endpointId, msgInfo.msgId)
+                            }
+                        }
                     }
-                    expectedChatImages.remove(update.payloadId)
-                    incomingFilePayloads.remove(update.payloadId)
                 }
             } else if (update.status == PayloadTransferUpdate.Status.FAILURE || update.status == PayloadTransferUpdate.Status.CANCELED) {
-                outgoingPayloadsTracker.remove(update.payloadId)
+                if (outgoingPayloadsTracker.containsKey(update.payloadId)) {
+                    val msgId = outgoingPayloadsTracker.remove(update.payloadId)!!
+                    CoroutineScope(Dispatchers.IO).launch {
+                        context?.let { ctx -> AppDatabase.getDatabase(ctx).nexuDao().updateStatus(msgId, -2) }
+                    }
+                    onMessageFailedListener?.invoke(msgId)
+                }
                 expectedProfileImages.remove(update.payloadId)
-                expectedGroupAvatars.remove(update.payloadId)
                 expectedChatImages.remove(update.payloadId)
                 incomingFilePayloads.remove(update.payloadId)
             }
         }
     }
 
-    private fun procesarMensajeEntrante(endpointId: String, msgId: Long, text: String, uri: Uri?) {
+    private fun procesarMensajeEntrante(chatId: String, msgId: Long, text: String, uri: Uri?, isGroup: Boolean, originalSender: String? = null, duration: Long = 0L) {
         context?.let { ctx ->
+            if (text.contains("SYS:REFRESH_GROUP") || text.contains("SYS:TYPING")) return
+
             val prefs = Prefs(ctx)
             val localUserId = prefs.getUserProfile().id
             if (localUserId.isEmpty()) return
 
-            val senderName = currentEndpointName ?: "Desconocido"
+            val senderName = originalSender ?: (currentEndpointName ?: "Desconocido")
+            val expiresAt = if (duration > 0) System.currentTimeMillis() + duration else null
+
+            val isNudge = text.contains("SYS:NUDGE")
+            val isEvent = text.contains("SYS:EVENT:")
+
+            val dbText = when {
+                isNudge -> "¡Te han enviado un zumbido! \uD83D\uDCA5"
+                isEvent -> text.substringAfter("SYS:EVENT:")
+                else -> text
+            }
+
+            val msgStatus = if (isNudge || isEvent) 99 else 0
 
             val entity = MessageEntity(
                 msgId = msgId,
                 localUserId = localUserId,
-                endpointId = senderName,
+                endpointId = chatId,
                 originalSender = senderName,
-                isGroup = false,
-                text = text,
+                isGroup = isGroup,
+                text = dbText,
                 imagePath = uri?.toString(),
                 isMine = false,
-                status = 0,
-                timestamp = System.currentTimeMillis()
+                status = msgStatus,
+                timestamp = System.currentTimeMillis(),
+                expiresAt = expiresAt
             )
 
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    AppDatabase.getDatabase(ctx).nexuDao().insertMessage(entity)
-                } catch (e: Exception) { Log.e("P2P", "Error saving msg", e) }
-            }
+                    val db = AppDatabase.getDatabase(ctx)
+                    db.nexuDao().insertMessage(entity)
 
-            if (activeChatIdentifier == senderName) {
-                onMessageReceivedListener?.invoke(msgId, text, uri)
-            } else {
-                mostrarNotificacion(ctx, senderName, text)
+                    val chatTitle = if(isGroup) {
+                        db.nexuDao().getGroup(chatId)?.groupName ?: "Grupo"
+                    } else {
+                        senderName
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        if (isNudge) {
+                            val vibrator = ctx.getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
+                            val pattern = longArrayOf(0, 500, 200, 500, 200, 800)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                vibrator.vibrate(android.os.VibrationEffect.createWaveform(pattern, -1))
+                            } else {
+                                @Suppress("DEPRECATION")
+                                vibrator.vibrate(pattern, -1)
+                            }
+
+                            if (activeChatIdentifier != chatId) {
+                                Toast.makeText(ctx, "¡$senderName te ha enviado un zumbido! \uD83D\uDCA5", Toast.LENGTH_LONG).show()
+                            }
+                        }
+
+                        if (activeChatIdentifier == chatId) {
+                            val uiText = if (isNudge) "SYS:NUDGE" else if (isEvent) "SYS:EVENT:$dbText" else dbText
+                            if (isGroup) {
+                                val prefix = if (duration > 0) "GRP_EPH_IN_CHAT:$senderName:$duration" else "GRP_IN_CHAT:$senderName"
+                                onMessageReceivedListener?.invoke(msgId, "$prefix:$uiText", uri)
+                            } else {
+                                val ephPrefix = if (duration > 0) "EPH_IN_CHAT:$duration:" else ""
+                                onMessageReceivedListener?.invoke(msgId, "$ephPrefix$uiText", uri)
+                            }
+                        } else {
+                            if (!isNudge && !isEvent) {
+                                val notifText = if(isGroup) "$senderName: $dbText" else dbText
+                                mostrarNotificacion(ctx, chatId, chatTitle, notifText, isGroup)
+                            }
+                        }
+
+                        val intent = Intent("com.offline.nexu.ACTION_UPDATE_CHAT_LIST")
+                        intent.setPackage(ctx.packageName)
+                        ctx.sendBroadcast(intent)
+                    }
+                } catch (e: Exception) { Log.e("P2P", "Error saving msg", e) }
             }
         }
     }
 
-    private fun mostrarNotificacion(ctx: Context, emisor: String, mensaje: String) {
+    private fun mostrarNotificacion(ctx: Context, chatId: String, chatTitle: String, mensaje: String, isGroup: Boolean) {
         val channelId = "nexu_messages"
         val notifManager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -291,27 +502,38 @@ object P2PManager {
             notifManager.createNotificationChannel(channel)
         }
         val intent = Intent(ctx, ChatActivity::class.java).apply {
-            putExtra("EXTRA_USER_NAME", emisor)
+            if (isGroup) {
+                putExtra("EXTRA_IS_GROUP", true)
+                putExtra("EXTRA_GROUP_ID", chatId)
+                putExtra("EXTRA_GROUP_NAME", chatTitle)
+            } else {
+                putExtra("EXTRA_USER_NAME", chatId)
+            }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
-        val pendingIntent = PendingIntent.getActivity(ctx, emisor.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val pendingIntent = PendingIntent.getActivity(ctx, chatId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        val textoMostrar = if (mensaje.isEmpty()) "📷 Multimedia recibida" else mensaje
+        val textoMostrar = if (mensaje.isEmpty()) "🖼️ Multimedia recibida" else mensaje
 
         val builder = NotificationCompat.Builder(ctx, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(emisor)
+            .setContentTitle(chatTitle)
             .setContentText(textoMostrar)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-        notifManager.notify(emisor.hashCode(), builder.build())
+        notifManager.notify(chatId.hashCode(), builder.build())
     }
 
     private fun sendAck(endpointId: String, msgId: Long) {
         context?.let { ctx ->
             val ackPayload = Payload.fromBytes("ACK:$msgId".toByteArray(Charsets.UTF_8))
-            Nearby.getConnectionsClient(ctx).sendPayload(endpointId, ackPayload)
+            val eps = NexuMeshManager.connectedEndpoints.toList()
+            if (eps.isNotEmpty()) {
+                Nearby.getConnectionsClient(ctx).sendPayload(eps, ackPayload)
+            } else {
+                Nearby.getConnectionsClient(ctx).sendPayload(endpointId, ackPayload)
+            }
         }
     }
 
@@ -321,13 +543,16 @@ object P2PManager {
             val subFolder = when(type) {
                 "VID" -> "NexuChat Videos"
                 "DOC" -> "NexuChat Documents"
-                "PROFILE", "GROUP_AVATAR" -> "Profiles"
+                "AUD" -> "NexuChat Voice Notes"
+                "PROFILE" -> "Profiles"
                 else -> "NexuChat Images"
             }
-            val ext = when(type) { "VID" -> ".mp4"; "DOC" -> ".pdf"; else -> ".jpg" }
-            val prefix = when(type) { "VID" -> "VID_"; "DOC" -> "DOC_"; "PROFILE" -> "PROF_"; "GROUP_AVATAR" -> "GRP_IMG_"; else -> "IMG_" }
+            val ext = when(type) { "VID" -> ".mp4"; "DOC" -> ".pdf"; "AUD" -> ".ogg"; else -> ".jpg" }
+            val prefix = when(type) { "VID" -> "VID_"; "DOC" -> "DOC_"; "AUD" -> "AUD_"; "PROFILE" -> "PROF_"; else -> "IMG_" }
 
-            val mediaDir = File(context!!.getExternalFilesDir(null), "NexuChat/Media/$subFolder")
+            // Usando directorio público, SIN subcarpeta /Sent para mensajes recibidos
+            val baseMediaDir = context!!.externalMediaDirs.firstOrNull() ?: context!!.getExternalFilesDir(null)
+            val mediaDir = File(baseMediaDir, "NexuChat/Media/$subFolder")
             if (!mediaDir.exists()) mediaDir.mkdirs()
             val nomedia = File(mediaDir, ".nomedia")
             if (!nomedia.exists()) nomedia.createNewFile()
@@ -344,12 +569,19 @@ object P2PManager {
                 if (inputStream == null && payloadFile.asParcelFileDescriptor() != null) {
                     try { inputStream = ParcelFileDescriptor.AutoCloseInputStream(payloadFile.asParcelFileDescriptor()) } catch (e: Exception) { }
                 }
-                if (inputStream == null && payloadFile.asJavaFile() != null) {
-                    try { if (payloadFile.asJavaFile()!!.exists()) inputStream = payloadFile.asJavaFile()!!.inputStream() } catch (e: Exception) { }
+                if (inputStream == null) {
+                    try {
+                        val javaFile = payloadFile.asJavaFile()
+                        if (javaFile != null && javaFile.exists()) {
+                            inputStream = javaFile.inputStream()
+                        }
+                    } catch (e: Exception) { }
                 }
             }
             if (inputStream == null) return null
-            inputStream.use { input -> FileOutputStream(newFile).use { output -> input.copyTo(output) } }
+
+            inputStream.use { input -> FileOutputStream(newFile).use { output -> input.copyTo(output, 64 * 1024) } }
+
             return Uri.fromFile(newFile)
         } catch (e: Exception) { return null }
     }

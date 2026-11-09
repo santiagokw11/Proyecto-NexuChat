@@ -46,7 +46,8 @@ class RadarView @JvmOverloads constructor(
     private var centerY = 0f
     private var pulseRadius = 0f
 
-    // Soporte para Bitmap añadido
+    var isAnimating = true // Control de animación
+
     data class UserPoint(val name: String, val emoji: String, val avatar: Bitmap?, val x: Float, val y: Float)
     private val users = mutableMapOf<String, UserPoint>()
 
@@ -61,13 +62,42 @@ class RadarView @JvmOverloads constructor(
         invalidate()
     }
 
-    // Actualizado para recibir el Bitmap opcional
     fun addUser(endpointId: String, name: String, emoji: String, avatar: Bitmap? = null) {
+        // Evitar duplicados visuales: Si ya existe alguien con este nombre, lo borramos para actualizar su posición
+        val existingKey = users.entries.find { it.value.name == name }?.key
+        if (existingKey != null) {
+            users.remove(existingKey)
+        }
         if (users.containsKey(endpointId)) return
-        val angle = Random.nextDouble(0.0, 2 * Math.PI)
-        val distance = Random.nextDouble(radius * 0.3, radius * 0.8)
-        val px = centerX + (distance * Math.cos(angle)).toFloat()
-        val py = centerY + (distance * Math.sin(angle)).toFloat()
+
+        var px = 0f
+        var py = 0f
+        var validPosition = false
+        var attempts = 0
+
+        // Distancias seguras: minDistance evita que se pinten detrás del círculo central
+        val minDistance = radius * 0.45
+        val maxDistance = radius * 0.85
+
+        // Algoritmo Anti-Colisiones
+        while (!validPosition && attempts < 50) {
+            val angle = Random.nextDouble(0.0, 2 * Math.PI)
+            val distance = Random.nextDouble(minDistance, maxDistance)
+            px = centerX + (distance * Math.cos(angle)).toFloat()
+            py = centerY + (distance * Math.sin(angle)).toFloat()
+
+            validPosition = true
+            for ((_, user) in users) {
+                val distToOther = sqrt((px - user.x).pow(2) + (py - user.y).pow(2))
+                // Distancia mínima de 140px entre íconos para que no se superpongan
+                if (distToOther < 140f) {
+                    validPosition = false
+                    break
+                }
+            }
+            attempts++
+        }
+
         users[endpointId] = UserPoint(name, emoji, avatar, px, py)
         invalidate()
     }
@@ -92,25 +122,28 @@ class RadarView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        pulseRadius += 4f
-        if (pulseRadius > radius) pulseRadius = 0f
+        if (isAnimating) {
+            pulseRadius += 4f
+            if (pulseRadius > radius) pulseRadius = 0f
 
-        canvas.drawCircle(centerX, centerY, pulseRadius, paintScanFill)
-        canvas.drawCircle(centerX, centerY, pulseRadius, paintScanBorder)
+            canvas.drawCircle(centerX, centerY, pulseRadius, paintScanFill)
+            canvas.drawCircle(centerX, centerY, pulseRadius, paintScanBorder)
+        }
 
         for ((_, user) in users) {
             if (user.avatar != null) {
-                // Si hay foto, la dibujamos centrada
                 val imgRadius = user.avatar.width / 2f
                 canvas.drawBitmap(user.avatar, user.x - imgRadius, user.y - imgRadius, null)
                 canvas.drawText(user.name, user.x, user.y + imgRadius + 30f, paintText)
             } else {
-                // Si es un dispositivo nuevo, dibujamos el emoji
                 canvas.drawText(user.emoji, user.x, user.y, paintEmoji)
                 canvas.drawText(user.name, user.x, user.y + 50f, paintText)
             }
         }
-        invalidate()
+
+        if (isAnimating) {
+            invalidate()
+        }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

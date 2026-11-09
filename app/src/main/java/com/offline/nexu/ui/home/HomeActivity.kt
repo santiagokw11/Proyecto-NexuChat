@@ -1,6 +1,7 @@
 package com.offline.nexu.ui.home
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
@@ -19,11 +20,12 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -38,15 +40,43 @@ import com.offline.nexu.databinding.ActivityHomeBinding
 import com.offline.nexu.ui.chat.ChatActivity
 import com.offline.nexu.ui.profile.ProfileActivity
 import com.offline.nexu.utils.ThemeUtils
+import com.offline.nexu.data.network.NexuMeshManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+// GESTOR GLOBAL DE NOTIFICACIONES
+object GlobalNotifications {
+    data class NotificationItem(
+        val endpointId: String,
+        val nombre: String,
+        val emoji: String,
+        val isIncoming: Boolean
+    )
+    val pendingNotifications = mutableListOf<NotificationItem>()
+    val rejectedConnectionsCount = mutableMapOf<String, Int>()
+    const val MAX_REJECTS = 3 // <-- MOVIDO AQUÍ PARA QUE SEA ACCESIBLE GLOBALMENTE
+
+    private val listeners = mutableListOf<() -> Unit>()
+
+    fun addListener(listener: () -> Unit) {
+        if (!listeners.contains(listener)) listeners.add(listener)
+    }
+
+    fun removeListener(listener: () -> Unit) {
+        listeners.remove(listener)
+    }
+
+    fun notifyBadgeUpdate() {
+        listeners.toList().forEach { it.invoke() }
+    }
+}
+
 class HomeActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityHomeBinding
-    private val SERVICE_ID = "com.offline.nexu.MESH_SERVICE"
+    private val SERVICE_ID = "com.offline.nexu.MESH_NETWORK"
     private lateinit var miPerfilP2P: String
 
     private val PERMISSION_REQUEST_CODE = 1234
@@ -58,8 +88,12 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var database: AppDatabase
     private lateinit var myLocalUserId: String
 
-    // Cierre forzoso de pop-ups
-    private var activeDialog: android.app.Dialog? = null
+    private var isActivityVisible = false
+    private var isRadarActive = true
+
+    private val endpointNamesTemp = mutableMapOf<String, String>()
+
+    private val badgeListener = { runOnUiThread { updateBellBadge() } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,7 +105,6 @@ class HomeActivity : AppCompatActivity() {
 
         cargarPerfilUsuario()
 
-        // Iniciar el servicio en primer plano para mantener la conexión
         val serviceIntent = Intent(this, ConnectionService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
@@ -91,11 +124,52 @@ class HomeActivity : AppCompatActivity() {
         }
 
         binding.radarView.onUserClick = { endpointId, nombreDestino ->
-            if (isDebugMode) {
-                irAlChat(endpointId, nombreDestino)
+            if (binding.cvNotificationsDropdown.visibility == View.VISIBLE) {
+                toggleNotificationsMenu()
             } else {
-                preguntarSiConectar(endpointId, nombreDestino)
+                if (isDebugMode) {
+                    irAlChat(endpointId, nombreDestino)
+                } else {
+                    preguntarSiConectar(endpointId, nombreDestino)
+                }
             }
+        }
+
+        binding.ivBell.setOnClickListener {
+            toggleNotificationsMenu()
+        }
+
+        binding.root.setOnClickListener {
+            if (binding.cvNotificationsDropdown.visibility == View.VISIBLE) {
+                toggleNotificationsMenu()
+            }
+        }
+
+        binding.btnToggleRadar.setOnClickListener {
+            isRadarActive = !isRadarActive
+            actualizarEstadoRadar()
+        }
+
+        binding.btnRefreshRadar.setOnClickListener {
+            if (!isRadarActive) {
+                Toast.makeText(this, "El radar está apagado", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            it.animate().rotationBy(360f).setDuration(500).start()
+
+            binding.tvRadarStatus.text = "Reiniciando radar..."
+            binding.radarView.clearUsers()
+
+            val client = Nearby.getConnectionsClient(applicationContext)
+            client.stopAdvertising()
+            client.stopDiscovery()
+
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (isRadarActive && hasPermissions() && !isDebugMode) {
+                    iniciarRadarP2P()
+                }
+            }, 1000)
         }
 
         binding.bottomNavigation.setOnItemSelectedListener { item ->
@@ -122,6 +196,191 @@ class HomeActivity : AppCompatActivity() {
         setupEasterEgg()
     }
 
+    private fun toggleNotificationsMenu() {
+        if (binding.cvNotificationsDropdown.visibility == View.VISIBLE) {
+            binding.cvNotificationsDropdown.animate()
+                .alpha(0f)
+                .translationY(-20f)
+                .setDuration(150)
+                .withEndAction { binding.cvNotificationsDropdown.visibility = View.GONE }
+                .start()
+        } else {
+            refreshNotificationsDropdown()
+            binding.cvNotificationsDropdown.alpha = 0f
+            binding.cvNotificationsDropdown.translationY = -20f
+            binding.cvNotificationsDropdown.visibility = View.VISIBLE
+            binding.cvNotificationsDropdown.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(150)
+                .start()
+        }
+    }
+
+    private fun refreshNotificationsDropdown() {
+        binding.llNotificationList.removeAllViews()
+
+        if (GlobalNotifications.pendingNotifications.isEmpty()) {
+            binding.tvEmptyNotifications.visibility = View.VISIBLE
+        } else {
+            binding.tvEmptyNotifications.visibility = View.GONE
+            val iterator = GlobalNotifications.pendingNotifications.toList()
+            val auraColor = ThemeUtils.getAuraColor(this)
+            val textColorPrimary = ContextCompat.getColor(this, R.color.text_primary)
+            val textColorSecondary = ContextCompat.getColor(this, R.color.text_secondary)
+
+            for (notif in iterator) {
+                val itemLayout = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { setMargins(0, 0, 0, 32) }
+                }
+
+                val infoLayout = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+
+                val emojiText = TextView(this).apply {
+                    text = notif.emoji
+                    textSize = 28f
+                    setPadding(0, 0, 24, 0)
+                }
+
+                val textCol = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                }
+
+                val nameText = TextView(this).apply {
+                    text = notif.nombre
+                    setTextColor(textColorPrimary)
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    textSize = 16f
+                }
+
+                val descText = TextView(this).apply {
+                    text = if (notif.isIncoming) "Quiere conectarse contigo" else "Detectado en la red"
+                    setTextColor(textColorSecondary)
+                    textSize = 13f
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { topMargin = 4 }
+                }
+
+                textCol.addView(nameText)
+                textCol.addView(descText)
+                infoLayout.addView(emojiText)
+                infoLayout.addView(textCol)
+
+                val actionLayout = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(0, 24, 0, 0)
+                }
+
+                val btnReject = Button(this).apply {
+                    text = "Ignorar"
+                    backgroundTintList = ColorStateList.valueOf(Color.parseColor("#4A4A4A"))
+                    setTextColor(Color.WHITE)
+                    textSize = 12f
+                    isAllCaps = false
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                        setMargins(0, 0, 16, 0)
+                    }
+                    setOnClickListener {
+                        if (notif.isIncoming) {
+                            Nearby.getConnectionsClient(applicationContext).rejectConnection(notif.endpointId)
+                            val currentCount = GlobalNotifications.rejectedConnectionsCount[notif.endpointId] ?: 0
+                            GlobalNotifications.rejectedConnectionsCount[notif.endpointId] = currentCount + 1
+                        } else {
+                            binding.radarView.addUser(notif.endpointId, notif.nombre, notif.emoji, null)
+                        }
+                        removerNotificacionYPopup(notif)
+                    }
+                }
+
+                val btnAccept = Button(this).apply {
+                    text = if (notif.isIncoming) "Aceptar" else "Conectar"
+                    backgroundTintList = ColorStateList.valueOf(auraColor)
+                    setTextColor(Color.WHITE)
+                    textSize = 12f
+                    isAllCaps = false
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    setOnClickListener {
+                        if (notif.isIncoming) {
+                            if (P2PManager.currentEndpointId == null) {
+                                P2PManager.currentEndpointId = notif.endpointId
+                                P2PManager.currentEndpointName = notif.nombre
+                            }
+                            Nearby.getConnectionsClient(applicationContext).acceptConnection(notif.endpointId, NexuMeshManager.getMeshPayloadCallback(applicationContext))
+                        } else {
+                            preguntarSiConectar(notif.endpointId, notif.nombre)
+                        }
+                        removerNotificacionYPopup(notif)
+                        toggleNotificationsMenu()
+                    }
+                }
+
+                actionLayout.addView(btnReject)
+                actionLayout.addView(btnAccept)
+
+                itemLayout.addView(infoLayout)
+                itemLayout.addView(actionLayout)
+
+                if (iterator.indexOf(notif) < iterator.size - 1) {
+                    val divider = View(this).apply {
+                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1).apply {
+                            setMargins(0, 16, 0, 0)
+                        }
+                        setBackgroundColor(Color.parseColor("#33808080"))
+                    }
+                    itemLayout.addView(divider)
+                }
+
+                binding.llNotificationList.addView(itemLayout)
+            }
+        }
+    }
+
+    private fun actualizarEstadoRadar() {
+        val auraColor = ThemeUtils.getAuraColor(this)
+        binding.radarView.isAnimating = isRadarActive
+
+        if (isRadarActive) {
+            binding.btnToggleRadar.setColorFilter(auraColor)
+            binding.tvRadarStatus.text = "Escaneando colmena..."
+            binding.radarView.invalidate()
+            if (hasPermissions() && !isDebugMode) {
+                iniciarRadarP2P()
+            }
+        } else {
+            binding.btnToggleRadar.setColorFilter(Color.GRAY)
+            binding.tvRadarStatus.text = "Radar apagado"
+            Nearby.getConnectionsClient(applicationContext).stopAdvertising()
+            Nearby.getConnectionsClient(applicationContext).stopDiscovery()
+            binding.radarView.clearUsers()
+        }
+    }
+
+    private fun updateBellBadge() {
+        binding.vRedDot.visibility = if (GlobalNotifications.pendingNotifications.isNotEmpty()) View.VISIBLE else View.GONE
+        if (binding.cvNotificationsDropdown.visibility == View.VISIBLE) {
+            refreshNotificationsDropdown()
+        }
+    }
+
+    private fun removerNotificacionYPopup(notif: GlobalNotifications.NotificationItem) {
+        GlobalNotifications.pendingNotifications.remove(notif)
+        GlobalNotifications.notifyBadgeUpdate()
+
+        if (binding.cvIncoming.visibility == View.VISIBLE && binding.tvPopupName.text == notif.nombre) {
+            binding.cvIncoming.visibility = View.GONE
+        }
+    }
+
     private fun cargarPerfilUsuario() {
         val prefs = Prefs(this)
         val profile = prefs.getUserProfile()
@@ -133,6 +392,9 @@ class HomeActivity : AppCompatActivity() {
         binding.tvMyName.setTextColor(auraColor)
         binding.radarCenterDot.backgroundTintList = ColorStateList.valueOf(auraColor)
         binding.fabReturnChat.backgroundTintList = ColorStateList.valueOf(auraColor)
+        binding.ivBell.setColorFilter(auraColor)
+        binding.btnToggleRadar.setColorFilter(auraColor)
+        binding.btnRefreshRadar.setColorFilter(auraColor)
 
         val navColors = ThemeUtils.getBottomNavColorStateList(auraColor)
         binding.bottomNavigation.itemIconTintList = navColors
@@ -167,6 +429,9 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        isActivityVisible = true
+        GlobalNotifications.addListener(badgeListener)
+        updateBellBadge()
         cargarPerfilUsuario()
         binding.bottomNavigation.selectedItemId = R.id.nav_radar
 
@@ -177,7 +442,7 @@ class HomeActivity : AppCompatActivity() {
         }
 
         if (hasPermissions()) {
-            if (!isDebugMode) {
+            if (!isDebugMode && isRadarActive) {
                 iniciarRadarP2P()
             }
         } else {
@@ -187,6 +452,8 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        isActivityVisible = false
+        GlobalNotifications.removeListener(badgeListener)
         overridePendingTransition(0, 0)
     }
 
@@ -210,7 +477,7 @@ class HomeActivity : AppCompatActivity() {
                     binding.radarView.addUser("debug_endpoint", "Robot", "🤖", null)
                 } else {
                     binding.radarView.clearUsers()
-                    iniciarRadarP2P()
+                    if (isRadarActive) iniciarRadarP2P()
                 }
                 tapCount = 0
             } else {
@@ -243,7 +510,7 @@ class HomeActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST_CODE && grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-            iniciarRadarP2P()
+            if (isRadarActive) iniciarRadarP2P()
         }
     }
 
@@ -277,6 +544,92 @@ class HomeActivity : AppCompatActivity() {
         } catch (e: Exception) { return null }
     }
 
+    private fun gestionarNuevaNotificacion(notif: GlobalNotifications.NotificationItem) {
+        val yaExiste = GlobalNotifications.pendingNotifications.any { it.endpointId == notif.endpointId }
+        if (!yaExiste) {
+            GlobalNotifications.pendingNotifications.add(notif)
+            GlobalNotifications.notifyBadgeUpdate()
+
+            if (binding.cvNotificationsDropdown.visibility == View.VISIBLE) {
+                refreshNotificationsDropdown()
+            }
+        }
+
+        if (notif.isIncoming) {
+            if (isActivityVisible) {
+                mostrarPopupEmergente(notif)
+            } else {
+                enviarNotificacionSistema(notif.endpointId, notif.nombre, "entrante")
+            }
+        }
+    }
+
+    private fun mostrarPopupEmergente(notif: GlobalNotifications.NotificationItem) {
+        binding.cvIncoming.visibility = View.VISIBLE
+        binding.tvPopupName.text = notif.nombre
+        binding.tvPopupEmoji.text = notif.emoji
+
+        binding.btnPopupAccept.setOnClickListener {
+            binding.cvIncoming.visibility = View.GONE
+            if (P2PManager.currentEndpointId == null) {
+                P2PManager.currentEndpointId = notif.endpointId
+                P2PManager.currentEndpointName = notif.nombre
+            }
+            Nearby.getConnectionsClient(applicationContext).acceptConnection(notif.endpointId, NexuMeshManager.getMeshPayloadCallback(applicationContext))
+            removerNotificacionYPopup(notif)
+        }
+
+        binding.btnPopupReject.setOnClickListener {
+            binding.cvIncoming.visibility = View.GONE
+            Nearby.getConnectionsClient(applicationContext).rejectConnection(notif.endpointId)
+            val currentCount = GlobalNotifications.rejectedConnectionsCount[notif.endpointId] ?: 0
+            GlobalNotifications.rejectedConnectionsCount[notif.endpointId] = currentCount + 1
+            removerNotificacionYPopup(notif)
+        }
+    }
+
+    private fun enviarNotificacionSistema(endpointId: String, nombre: String, tipo: String) {
+        val channelId = "nexu_connections"
+        val notifManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(channelId, "Solicitudes de Radar", android.app.NotificationManager.IMPORTANCE_HIGH)
+            notifManager.createNotificationChannel(channel)
+        }
+
+        val notifId = endpointId.hashCode()
+
+        if (tipo == "entrante") {
+            val acceptIntent = Intent(this, Class.forName("com.offline.nexu.notifications.ConnectionReceiver")).apply {
+                action = "ACCEPT_CONNECTION"
+                putExtra("ENDPOINT_ID", endpointId)
+                putExtra("NOTIF_ID", notifId)
+                putExtra("NOMBRE", nombre)
+            }
+            val acceptPending = android.app.PendingIntent.getBroadcast(this, 0, acceptIntent, android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
+
+            val rejectIntent = Intent(this, Class.forName("com.offline.nexu.notifications.ConnectionReceiver")).apply {
+                action = "REJECT_CONNECTION"
+                putExtra("ENDPOINT_ID", endpointId)
+                putExtra("NOTIF_ID", notifId)
+                putExtra("NOMBRE", nombre)
+            }
+            val rejectPending = android.app.PendingIntent.getBroadcast(this, 1, rejectIntent, android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
+
+            val builder = androidx.core.app.NotificationCompat.Builder(this, channelId)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Nueva conexión 📡")
+                .setContentText("¡$nombre quiere conectarse!")
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Rechazar", rejectPending)
+                .addAction(android.R.drawable.ic_menu_add, "Aceptar", acceptPending)
+                .setAutoCancel(true)
+                .setTimeoutAfter(60000)
+
+            notifManager.notify(notifId, builder.build())
+        }
+    }
+
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
             val partes = info.endpointName.split("|")
@@ -294,10 +647,16 @@ class HomeActivity : AppCompatActivity() {
                 val esConocidoLocal = chatsActivos.any { it.endpointId == nombre }
 
                 withContext(Dispatchers.Main) {
-                    if (esConocidoLocal) {
-                        sugerirReconexion(endpointId, nombre, emoji, bitmap)
-                    } else {
+                    val isConnected = NexuMeshManager.connectedEndpoints.contains(endpointId) || P2PManager.connectedNames.containsValue(nombre)
+
+                    if (!isConnected) {
                         binding.radarView.addUser(endpointId, nombre, emoji, bitmap)
+                    }
+
+                    if (esConocidoLocal && !isConnected) {
+                        val notif = GlobalNotifications.NotificationItem(endpointId, nombre, emoji, false)
+                        gestionarNuevaNotificacion(notif)
+                    } else if (!isConnected) {
                         binding.tvRadarStatus.text = "¡Nodo encontrado en el área!"
                     }
                 }
@@ -308,38 +667,6 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    private fun sugerirReconexion(endpointId: String, nombre: String, emoji: String, bitmap: Bitmap?) {
-        // Asegurarse de cerrar el anterior si existiera uno suelto
-        activeDialog?.dismiss()
-
-        val dialog = android.app.Dialog(this)
-        dialog.setContentView(R.layout.dialog_reconnect)
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        dialog.findViewById<TextView>(R.id.tvReconnectEmoji).text = emoji
-        dialog.findViewById<TextView>(R.id.tvReconnectMessage).text = "Se ha detectado a $nombre en la colmena.\n¿Deseas restablecer la conexión P2P?"
-
-        val auraColor = ThemeUtils.getAuraColor(this)
-        dialog.findViewById<TextView>(R.id.tvReconnectTitle).setTextColor(auraColor)
-        dialog.findViewById<Button>(R.id.btnReconectar).backgroundTintList = ColorStateList.valueOf(auraColor)
-
-        dialog.findViewById<Button>(R.id.btnIgnorar).setOnClickListener {
-            binding.radarView.addUser(endpointId, nombre, emoji, bitmap)
-            dialog.dismiss()
-        }
-
-        dialog.findViewById<Button>(R.id.btnReconectar).setOnClickListener {
-            preguntarSiConectar(endpointId, nombre)
-            // No hacemos dismiss manual aquí, se cerrará con onConnectionResult
-        }
-
-        activeDialog = dialog
-        dialog.show()
-
-        val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
-        dialog.window?.setLayout(width, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
-    }
-
     private fun preguntarSiConectar(endpointId: String, nombreDestino: String) {
         binding.tvRadarStatus.text = "Enviando solicitud a $nombreDestino..."
         Nearby.getConnectionsClient(applicationContext).disconnectFromEndpoint(endpointId)
@@ -347,73 +674,86 @@ class HomeActivity : AppCompatActivity() {
             .requestConnection(miPerfilP2P, endpointId, connectionLifecycleCallback)
             .addOnFailureListener {
                 binding.tvRadarStatus.text = "No se pudo enviar la solicitud a $nombreDestino"
-                activeDialog?.dismiss()
-                activeDialog = null
             }
     }
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
+            val rejectCount = GlobalNotifications.rejectedConnectionsCount[endpointId] ?: 0
+            if (rejectCount >= GlobalNotifications.MAX_REJECTS) {
+                Nearby.getConnectionsClient(applicationContext).rejectConnection(endpointId)
+                return
+            }
+
             val partes = info.endpointName.split("|")
             val nombre = if (partes.size > 1) partes[1] else info.endpointName
+            val emoji = if (partes.isNotEmpty()) partes[0] else "📱"
+
+            endpointNamesTemp[endpointId] = nombre
 
             if (info.isIncomingConnection) {
-                // Cierra cualquier otro diálogo de reconexión pendiente para abrir este
-                activeDialog?.dismiss()
-
-                val dialog = android.app.Dialog(this@HomeActivity)
-                dialog.setContentView(R.layout.dialog_incoming_connection)
-                dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-                val tvName = dialog.findViewById<TextView>(R.id.tvCallerName)
-                val btnAccept = dialog.findViewById<Button>(R.id.btnAccept)
-                val btnReject = dialog.findViewById<Button>(R.id.btnReject)
-
-                tvName.text = nombre
-
-                btnAccept.setOnClickListener {
+                NexuMeshManager.payloadCallbackPendiente = NexuMeshManager.getMeshPayloadCallback(applicationContext)
+                val notif = GlobalNotifications.NotificationItem(endpointId, nombre, emoji, true)
+                gestionarNuevaNotificacion(notif)
+            } else {
+                if (P2PManager.currentEndpointId == null) {
                     P2PManager.currentEndpointId = endpointId
                     P2PManager.currentEndpointName = nombre
-                    Nearby.getConnectionsClient(applicationContext).acceptConnection(endpointId, P2PManager.payloadCallback)
                 }
-
-                btnReject.setOnClickListener {
-                    Nearby.getConnectionsClient(applicationContext).rejectConnection(endpointId)
-                    dialog.dismiss()
-                }
-
-                dialog.setCancelable(false)
-                activeDialog = dialog
-                dialog.show()
-
-            } else {
-                P2PManager.currentEndpointId = endpointId
-                P2PManager.currentEndpointName = nombre
-                Nearby.getConnectionsClient(applicationContext).acceptConnection(endpointId, P2PManager.payloadCallback)
+                Nearby.getConnectionsClient(applicationContext).acceptConnection(endpointId, NexuMeshManager.getMeshPayloadCallback(applicationContext))
             }
         }
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
-            // AQUÍ LA MAGIA: Cuando la conexión se responde, cerramos cualquier diálogo que estuviese abierto
-            activeDialog?.dismiss()
-            activeDialog = null
+            val iterator = GlobalNotifications.pendingNotifications.toList()
+            for (n in iterator) {
+                if (n.endpointId == endpointId) removerNotificacionYPopup(n)
+            }
+
+            val nombreDestino = endpointNamesTemp[endpointId] ?: P2PManager.currentEndpointName ?: "Conectado"
 
             if (result.status.statusCode == ConnectionsStatusCodes.STATUS_OK) {
+                NexuMeshManager.connectedEndpoints.add(endpointId)
+                P2PManager.connectedNames[endpointId] = nombreDestino
+
+                if (P2PManager.currentEndpointId == null) {
+                    P2PManager.currentEndpointId = endpointId
+                    P2PManager.currentEndpointName = nombreDestino
+                }
+
+                binding.radarView.removeUser(endpointId)
                 P2PManager.sendProfileHandshake(endpointId, Prefs(applicationContext).getUserProfile(), applicationContext)
-                irAlChat(endpointId, P2PManager.currentEndpointName ?: "Conectado")
+
+                Toast.makeText(this@HomeActivity, "Conexión establecida con $nombreDestino", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this@HomeActivity, "Conexión rechazada o fallida", Toast.LENGTH_SHORT).show()
                 binding.tvRadarStatus.text = "Buscando colmena P2P..."
-                P2PManager.currentEndpointId = null
-                P2PManager.currentEndpointName = null
+                if (P2PManager.currentEndpointId == endpointId) {
+                    P2PManager.currentEndpointId = null
+                    P2PManager.currentEndpointName = null
+                }
+                NexuMeshManager.connectedEndpoints.remove(endpointId)
+                P2PManager.connectedNames.remove(endpointId)
             }
         }
 
         override fun onDisconnected(endpointId: String) {
             Toast.makeText(this@HomeActivity, "Desconectado de la red P2P", Toast.LENGTH_SHORT).show()
-            P2PManager.currentEndpointId = null
-            P2PManager.currentEndpointName = null
-            binding.fabReturnChat.visibility = View.GONE
+            if (P2PManager.currentEndpointId == endpointId) {
+                P2PManager.currentEndpointId = null
+                P2PManager.currentEndpointName = null
+            }
+            NexuMeshManager.connectedEndpoints.remove(endpointId)
+            P2PManager.connectedNames.remove(endpointId)
+            endpointNamesTemp.remove(endpointId)
+
+            if (P2PManager.currentEndpointId == null && P2PManager.connectedNames.isNotEmpty()) {
+                val first = P2PManager.connectedNames.entries.first()
+                P2PManager.currentEndpointId = first.key
+                P2PManager.currentEndpointName = first.value
+            }
+
+            binding.fabReturnChat.visibility = if (P2PManager.currentEndpointId != null) View.VISIBLE else View.GONE
         }
     }
 
@@ -423,10 +763,5 @@ class HomeActivity : AppCompatActivity() {
         intent.putExtra("EXTRA_USER_NAME", nombreDestino)
         intent.putExtra("EXTRA_IS_DEBUG", isDebugMode)
         startActivity(intent)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        activeDialog?.dismiss()
     }
 }

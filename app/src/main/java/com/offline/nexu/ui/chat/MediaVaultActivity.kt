@@ -21,7 +21,7 @@ class MediaVaultActivity : AppCompatActivity() {
     private var contactName: String = ""
     private lateinit var db: AppDatabase
     private var imagesList = listOf<String>()
-    private lateinit var myLocalUserId: String // NUEVO: ID de sesión
+    private lateinit var myLocalUserId: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,7 +30,7 @@ class MediaVaultActivity : AppCompatActivity() {
 
         contactName = intent.getStringExtra("EXTRA_USER_NAME") ?: "Desconocido"
         db = AppDatabase.getDatabase(this)
-        myLocalUserId = Prefs(this).getUserProfile().id // Obtenemos el ID
+        myLocalUserId = Prefs(this).getUserProfile().id
 
         binding.btnBack.setOnClickListener { finish() }
 
@@ -42,8 +42,7 @@ class MediaVaultActivity : AppCompatActivity() {
 
     private fun cargarImagenes() {
         lifecycleScope.launch(Dispatchers.IO) {
-            // PASAMOS myLocalUserId PARA QUE FILTRE CORRECTAMENTE
-            imagesList = db.nexuDao().getSharedImages(contactName, myLocalUserId)
+            imagesList = db.nexuDao().getSharedImages(contactName, myLocalUserId).filter { it.isNotBlank() }
             withContext(Dispatchers.Main) {
                 mostrarMultimedia()
             }
@@ -85,10 +84,19 @@ class MediaVaultActivity : AppCompatActivity() {
         } else {
             binding.layoutEmptyState.visibility = View.GONE
             binding.rvMedia.visibility = View.VISIBLE
-            binding.rvMedia.adapter = MediaVaultAdapter(imagesList) { uri ->
-                val intent = Intent(this@MediaVaultActivity, ImageViewerActivity::class.java)
-                intent.putExtra("IMAGE_URI", uri)
-                startActivity(intent)
+
+            // --- AQUÍ ACTIVAMOS EL DISEÑO CUADRADO ADAPTATIVO (isGrid = true) ---
+            binding.rvMedia.adapter = MediaVaultAdapter(imagesList, isGrid = true) { uriStr ->
+                val isVideo = uriStr.endsWith(".mp4", ignoreCase = true) || uriStr.contains("VID_") || uriStr.contains("video")
+                if (isVideo) {
+                    val intent = Intent(this@MediaVaultActivity, Class.forName("com.offline.nexu.ui.chat.VideoPlayerActivity"))
+                    intent.putExtra("VIDEO_URI", uriStr)
+                    startActivity(intent)
+                } else {
+                    val intent = Intent(this@MediaVaultActivity, ImageViewerActivity::class.java)
+                    intent.putExtra("IMAGE_URI", uriStr)
+                    startActivity(intent)
+                }
             }
         }
     }

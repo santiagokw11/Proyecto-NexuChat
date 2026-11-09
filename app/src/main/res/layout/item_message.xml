@@ -25,82 +25,179 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <TextView
+        android:id="@+id/tvSystemMessage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/button_rounded"
+        android:backgroundTint="#20808080"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="6dp"
+        android:textStyle="italic"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvDateSeparator" />
+
+    <ImageView
+        android:id="@+id/ivRetrySent"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginEnd="4dp"
+        android:src="@android:drawable/ic_popup_sync"
+        app:tint="#F44336"
+        android:visibility="gone"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        app:layout_constraintEnd_toStartOf="@id/layoutSent"
+        app:layout_constraintBottom_toBottomOf="@id/layoutSent" />
+
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layoutSent"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
+        android:layout_marginStart="40dp"
         android:background="@drawable/bg_msg_sent"
+        android:minWidth="110dp"
         android:padding="6dp"
         android:visibility="gone"
         app:layout_constrainedWidth="true"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvDateSeparator"
+        app:layout_constraintTop_toBottomOf="@id/tvSystemMessage"
         app:layout_constraintWidth_max="310dp">
 
         <androidx.cardview.widget.CardView
             android:id="@+id/cvImageSent"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:visibility="gone"
-            app:cardCornerRadius="10dp"
+            app:cardCornerRadius="8dp"
             app:cardElevation="0dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintWidth_min="260dp">
+            app:layout_constraintTop_toTopOf="parent">
 
             <ImageView
                 android:id="@+id/ivSent"
-                android:layout_width="match_parent"
+                android:layout_width="260dp"
                 android:layout_height="260dp"
-                android:minWidth="260dp"
                 android:scaleType="centerCrop" />
+
+            <ProgressBar
+                android:id="@+id/progressBarSent"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:layout_gravity="top"
+                android:visibility="gone"
+                android:max="100"
+                android:elevation="5dp"
+                android:progressTint="#4CAF50"
+                android:progressBackgroundTint="#80FFFFFF" />
         </androidx.cardview.widget.CardView>
 
-        <ProgressBar
-            android:id="@+id/progressBarSent"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="160dp"
+        <LinearLayout
+            android:id="@+id/layoutAudioSent"
+            android:layout_width="260dp"
             android:layout_height="wrap_content"
+            android:orientation="vertical"
             android:visibility="gone"
-            android:max="100"
-            android:elevation="5dp"
-            android:progressTint="#FFFFFF"
-            android:progressBackgroundTint="#80FFFFFF"
-            app:layout_constraintTop_toTopOf="@id/cvImageSent"
-            app:layout_constraintBottom_toBottomOf="@id/cvImageSent"
+            android:layout_marginTop="4dp"
+            android:padding="4dp"
+            android:paddingBottom="20dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/cvImageSent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/btnPlayPauseSent"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:src="@android:drawable/ic_media_play"
+                    app:tint="@color/white"/>
+
+                <com.offline.nexu.ui.chat.WaveformSeekBar
+                    android:id="@+id/waveformSent"
+                    android:layout_width="0dp"
+                    android:layout_height="30dp"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="8dp"/>
+
+                <TextView
+                    android:id="@+id/tvSpeedSent"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="@drawable/circle_background"
+                    android:backgroundTint="#40000000"
+                    android:gravity="center"
+                    android:text="1x"
+                    android:textColor="@color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold"/>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvDurationSent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="44dp"
+                android:textColor="#CCFFFFFF"
+                android:textSize="11sp"
+                android:text="00:00" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/ivForwardSent"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
+            android:background="#80000000"
+            android:elevation="2dp"
+            android:padding="6dp"
+            android:src="@android:drawable/ic_menu_share"
+            android:visibility="gone"
             app:layout_constraintStart_toStartOf="@id/cvImageSent"
-            app:layout_constraintEnd_toEndOf="@id/cvImageSent" />
+            app:layout_constraintTop_toTopOf="@id/cvImageSent"
+            app:tint="#FFFFFF" />
 
         <TextView
             android:id="@+id/tvTextSent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="4dp"
             android:layout_marginTop="4dp"
-            android:layout_marginBottom="2dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginBottom="18dp"
             android:textColor="#FFFFFF"
             android:textSize="16sp"
             app:layout_constrainedWidth="true"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/timeContainerSent"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/cvImageSent" />
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/layoutAudioSent" />
 
         <LinearLayout
             android:id="@+id/timeContainerSent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
             android:layout_marginEnd="4dp"
             android:layout_marginBottom="2dp"
-            android:gravity="bottom"
+            android:gravity="bottom|end"
             android:orientation="horizontal"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/tvTextSent">
+            app:layout_constraintEnd_toEndOf="parent">
 
             <TextView
                 android:id="@+id/tvTimeSent"
@@ -125,75 +222,160 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="40dp"
         android:background="@drawable/bg_msg_received"
+        android:minWidth="110dp"
         android:padding="6dp"
         android:visibility="gone"
         app:layout_constrainedWidth="true"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvDateSeparator"
+        app:layout_constraintTop_toBottomOf="@id/tvSystemMessage"
         app:layout_constraintWidth_max="310dp">
+
+        <TextView
+            android:id="@+id/tvSenderName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="2dp"
+            android:textColor="@color/primary_color"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
         <androidx.cardview.widget.CardView
             android:id="@+id/cvImageReceived"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
             android:visibility="gone"
-            app:cardCornerRadius="10dp"
+            app:cardCornerRadius="8dp"
             app:cardElevation="0dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintWidth_min="260dp">
+            app:layout_constraintTop_toBottomOf="@id/tvSenderName">
 
             <ImageView
                 android:id="@+id/ivReceived"
-                android:layout_width="match_parent"
+                android:layout_width="260dp"
                 android:layout_height="260dp"
-                android:minWidth="260dp"
                 android:scaleType="centerCrop" />
+
+            <ProgressBar
+                android:id="@+id/progressBarReceived"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:layout_gravity="top"
+                android:visibility="gone"
+                android:max="100"
+                android:elevation="5dp"
+                android:progressTint="#4CAF50"
+                android:progressBackgroundTint="#80FFFFFF" />
         </androidx.cardview.widget.CardView>
 
-        <ProgressBar
-            android:id="@+id/progressBarReceived"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="160dp"
+        <LinearLayout
+            android:id="@+id/layoutAudioReceived"
+            android:layout_width="260dp"
             android:layout_height="wrap_content"
+            android:orientation="vertical"
             android:visibility="gone"
-            android:max="100"
-            android:elevation="5dp"
+            android:layout_marginTop="4dp"
+            android:padding="4dp"
+            android:paddingBottom="20dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/cvImageReceived">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/btnPlayPauseReceived"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:src="@android:drawable/ic_media_play"
+                    app:tint="?android:attr/textColorPrimary"/>
+
+                <com.offline.nexu.ui.chat.WaveformSeekBar
+                    android:id="@+id/waveformReceived"
+                    android:layout_width="0dp"
+                    android:layout_height="30dp"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="8dp"/>
+
+                <TextView
+                    android:id="@+id/tvSpeedReceived"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="@drawable/circle_background"
+                    android:backgroundTint="#20000000"
+                    android:gravity="center"
+                    android:text="1x"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textSize="12sp"
+                    android:textStyle="bold"/>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvDurationReceived"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="44dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                android:text="00:00" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/ivForwardReceived"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginTop="8dp"
+            android:background="#80000000"
+            android:elevation="2dp"
+            android:padding="6dp"
+            android:src="@android:drawable/ic_menu_share"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="@id/cvImageReceived"
             app:layout_constraintTop_toTopOf="@id/cvImageReceived"
-            app:layout_constraintBottom_toBottomOf="@id/cvImageReceived"
-            app:layout_constraintStart_toStartOf="@id/cvImageReceived"
-            app:layout_constraintEnd_toEndOf="@id/cvImageReceived" />
+            app:tint="#FFFFFF" />
 
         <TextView
             android:id="@+id/tvTextReceived"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="4dp"
             android:layout_marginTop="4dp"
-            android:layout_marginBottom="2dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginBottom="18dp"
             android:textColor="@color/text_primary"
             android:textSize="16sp"
             app:layout_constrainedWidth="true"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/timeContainerReceived"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/cvImageReceived" />
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/layoutAudioReceived" />
 
         <LinearLayout
             android:id="@+id/timeContainerReceived"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
             android:layout_marginEnd="4dp"
             android:layout_marginBottom="2dp"
-            android:gravity="bottom"
+            android:gravity="bottom|end"
             android:orientation="horizontal"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/tvTextReceived">
+            app:layout_constraintEnd_toEndOf="parent">
 
             <TextView
                 android:id="@+id/tvTimeReceived"

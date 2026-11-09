@@ -1,25 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/background_main"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingTop="16dp">
+    android:background="?android:colorBackground">
 
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Seleccion de archivo"
-        android:textAlignment="center"
-        android:textColor="@color/text_primary"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="16dp" />
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:gravity="center_vertical"
+        android:background="?android:colorBackground">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Álbum: "
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary"/>
+
+        <Spinner
+            android:id="@+id/spinnerAlbums"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_spinner_rounded"/>
+    </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvCustomGallery"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="400dp"
         android:clipToPadding="false"
-        android:paddingBottom="20dp" />
+        android:padding="4dp" />
 </LinearLayout>
