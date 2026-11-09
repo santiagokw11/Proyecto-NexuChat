@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -100,7 +101,6 @@ class ChatListAdapter(
             }
             tvLastMsg.text = "$prefix$msgContent"
 
-            // AHORA LEE EL ESTADO EN TIEMPO REAL DESDE EL MODELO
             if (!item.entity.isGroup) {
                 vOnlineIndicator.visibility = View.VISIBLE
                 if (item.isOnline) {
@@ -112,15 +112,22 @@ class ChatListAdapter(
                 vOnlineIndicator.visibility = View.GONE
             }
 
+            // LÓGICA INFALIBLE PARA MUTAR EL VECTOR Y PINTARLO
             if (item.entity.isMine && item.entity.status != -1 && item.entity.text?.startsWith("SYS:") == false) {
                 ivMsgStatus.visibility = View.VISIBLE
-                when (item.entity.status) {
-                    0 -> ivMsgStatus.setImageResource(R.drawable.ic_msg_clock)
-                    1 -> ivMsgStatus.setImageResource(R.drawable.ic_msg_sent)
-                    2 -> ivMsgStatus.setImageResource(R.drawable.ic_msg_delivered)
-                    3 -> ivMsgStatus.setImageResource(R.drawable.ic_msg_delivered)
-                    else -> ivMsgStatus.visibility = View.GONE
+
+                val drawableRes = when (item.entity.status) {
+                    0 -> R.drawable.ic_msg_clock
+                    1 -> R.drawable.ic_msg_sent
+                    else -> R.drawable.ic_msg_delivered
                 }
+
+                val colorToApply = if (item.entity.status == 3) auraColor else Color.WHITE
+
+                val drawable = ContextCompat.getDrawable(itemView.context, drawableRes)?.mutate()
+                drawable?.setTint(colorToApply)
+                ivMsgStatus.setImageDrawable(drawable)
+
             } else {
                 ivMsgStatus.visibility = View.GONE
             }
@@ -240,13 +247,22 @@ class ChatListAdapter(
 }
 
 class ChatDiffCallback : DiffUtil.ItemCallback<ChatItemUI>() {
-    override fun areItemsTheSame(oldItem: ChatItemUI, newItem: ChatItemUI) = oldItem.entity.endpointId == newItem.entity.endpointId
-    override fun areContentsTheSame(oldItem: ChatItemUI, newItem: ChatItemUI) =
-        oldItem.entity.msgId == newItem.entity.msgId &&
+    override fun areItemsTheSame(oldItem: ChatItemUI, newItem: ChatItemUI): Boolean {
+        return oldItem.entity.endpointId == newItem.entity.endpointId
+    }
+
+    override fun areContentsTheSame(oldItem: ChatItemUI, newItem: ChatItemUI): Boolean {
+        // Se comparan explícitamente todos los campos que pueden cambiar en tiempo real
+        return oldItem.entity.msgId == newItem.entity.msgId &&
+                oldItem.entity.status == newItem.entity.status &&
+                oldItem.entity.text == newItem.entity.text &&
+                oldItem.entity.timestamp == newItem.entity.timestamp &&
+                oldItem.entity.imagePath == newItem.entity.imagePath &&
                 oldItem.isPinned == newItem.isPinned &&
                 oldItem.isMuted == newItem.isMuted &&
                 oldItem.groupExpirationTime == newItem.groupExpirationTime &&
                 oldItem.unreadCount == newItem.unreadCount &&
                 oldItem.forceUnread == newItem.forceUnread &&
-                oldItem.isOnline == newItem.isOnline // AÑADIDO PARA ACTUALIZACIÓN EN TIEMPO REAL
+                oldItem.isOnline == newItem.isOnline
+    }
 }

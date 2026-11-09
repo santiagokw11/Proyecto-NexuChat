@@ -325,6 +325,9 @@ class NexuMeshManager(private val context: Context, private val nickname: String
                     }
                     P2PManager.inicializarChatSiNoExiste(context, endpointId, nombreReal)
                 }
+                // Si la conexión se establece sin tener HomeActivity abierta (p. ej. desde el
+                // servicio en segundo plano), nadie más dispara el intercambio de perfil/foto.
+                P2PManager.sendProfileHandshake(endpointId, Prefs(context).getUserProfile(), context)
                 iniciarPingPeriodico(endpointId)
                 P2PManager.reenviarMensajesPendientesGlobal(context)
             } else {
@@ -375,31 +378,39 @@ class NexuMeshManager(private val context: Context, private val nickname: String
         val sharedPrefs = context.getSharedPreferences("NexuSettings", Context.MODE_PRIVATE)
         val isRadarHidden = sharedPrefs.getBoolean("radar_hidden", false)
 
+        val options = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
         // 2. MODO FANTASMA: Solo anunciarnos si NO está oculto
         if (!isRadarHidden) {
-            val options = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
-            connectionsClient.startAdvertising(nickname, SERVICE_ID, connectionLifecycleCallback, options)
+            try {
+                connectionsClient.startAdvertising(nickname, SERVICE_ID, connectionLifecycleCallback, options)
+            } catch (e: Exception) { e.printStackTrace() }
         }
 
         // 3. SIEMPRE seguir descubriendo (Para que tú sí puedas ver a los demás)
         val discoveryOptions = DiscoveryOptions.Builder().setStrategy(STRATEGY).build()
-        connectionsClient.startDiscovery(SERVICE_ID, object : EndpointDiscoveryCallback() {
-            override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
-                // Al encontrar a alguien, solicitamos conexión silenciosa para armar la malla
-                connectionsClient.requestConnection(nickname, endpointId, connectionLifecycleCallback)
-            }
-            override fun onEndpointLost(endpointId: String) {}
-        }, discoveryOptions)
+        try {
+            connectionsClient.startDiscovery(SERVICE_ID, object : EndpointDiscoveryCallback() {
+                override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
+                    // Al encontrar a alguien, solicitamos conexión silenciosa para armar la malla
+                    connectionsClient.requestConnection(nickname, endpointId, connectionLifecycleCallback)
+                }
+                override fun onEndpointLost(endpointId: String) {}
+            }, discoveryOptions)
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     fun setVisibilidadRadar(visible: Boolean) {
         if (visible) {
             // El usuario desactivó el Modo Fantasma, volvemos a anunciarnos
             val options = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
-            connectionsClient.startAdvertising(nickname, SERVICE_ID, connectionLifecycleCallback, options)
+            try {
+                connectionsClient.startAdvertising(nickname, SERVICE_ID, connectionLifecycleCallback, options)
+            } catch (e: Exception) { e.printStackTrace() }
         } else {
             // El usuario activó el Modo Fantasma, nos volvemos invisibles de inmediato
-            connectionsClient.stopAdvertising()
+            try {
+                connectionsClient.stopAdvertising()
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 

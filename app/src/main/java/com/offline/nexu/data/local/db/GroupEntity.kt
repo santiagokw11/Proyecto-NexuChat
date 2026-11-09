@@ -10,5 +10,8 @@ data class GroupEntity(
     val groupAvatar: String?,
     val adminId: String,
     val members: String,
-    val expirationTime: Long? = null // NUEVO: Tiempo en que el grupo se autodestruye
+    val expirationTime: Long? = null, // NUEVO: Tiempo en que el grupo se autodestruye
+    // Número de secuencia de la última actualización aplicada. Evita que un SYS:GROUP_UPDATE
+    // viejo reenviado (reintento pendiente) revierta una edición más reciente ya aplicada.
+    val version: Long = 1L
 )

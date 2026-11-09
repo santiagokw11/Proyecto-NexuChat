@@ -51,6 +51,7 @@ import com.offline.nexu.ui.chat.helpers.AttachmentHelper
 import com.offline.nexu.ui.chat.helpers.EmojiHelper
 import com.offline.nexu.ui.home.P2PManager
 import com.offline.nexu.data.network.NexuMeshManager
+import com.offline.nexu.utils.MsgIdGenerator
 import com.offline.nexu.utils.ThemeUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -88,7 +89,6 @@ class ChatActivity : AppCompatActivity() {
 
     private lateinit var emojiHelper: EmojiHelper
 
-    // Variables para notas de voz
     private var mediaRecorder: MediaRecorder? = null
     private var audioFilePath: String? = null
     private var isRecording = false
@@ -107,6 +107,11 @@ class ChatActivity : AppCompatActivity() {
     private val requestAudioPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) Toast.makeText(this, "Permiso concedido. Mantén presionado para grabar.", Toast.LENGTH_SHORT).show()
         else Toast.makeText(this, "Permiso de micrófono denegado", Toast.LENGTH_SHORT).show()
+    }
+
+    private val requestCameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) takePictureLauncher.launch(null)
+        else Toast.makeText(this, "Permiso de cámara denegado", Toast.LENGTH_SHORT).show()
     }
 
     private val takePictureLauncher = registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
@@ -270,12 +275,12 @@ class ChatActivity : AppCompatActivity() {
                         lifecycleScope.launch(Dispatchers.IO) {
                             database.nexuDao().updateGroupExpiration(groupId, groupExpirationTime!!)
                             val cmd = "SYS:ADD_TIME:$groupId:${groupExpirationTime!!}"
-                            NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, myName, groupId, System.currentTimeMillis(), "TXT:0:$cmd")
+                            NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, myName, groupId, MsgIdGenerator.next(), "TXT:0:$cmd")
 
                             val eventText = "$myName añadió tiempo extra al grupo"
-                            NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, myName, groupId, System.currentTimeMillis() + 10, "TXT:0:SYS:EVENT:$eventText")
+                            NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, myName, groupId, MsgIdGenerator.next(), "TXT:0:SYS:EVENT:$eventText")
 
-                            val localMsg = MessageEntity(msgId = System.currentTimeMillis() + 20, localUserId = myLocalUserId, endpointId = groupId, originalSender = myLocalUserId, isGroup = true, text = "Añadiste tiempo extra al grupo", imagePath = null, isMine = true, status = 99, timestamp = System.currentTimeMillis())
+                            val localMsg = MessageEntity(msgId = MsgIdGenerator.next(), localUserId = myLocalUserId, endpointId = groupId, originalSender = myLocalUserId, isGroup = true, text = "Añadiste tiempo extra al grupo", imagePath = null, isMine = true, status = 99, timestamp = System.currentTimeMillis())
                             database.nexuDao().insertMessage(localMsg)
                             withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "Tiempo extra añadido", Toast.LENGTH_SHORT).show() }
                         }
@@ -305,6 +310,14 @@ class ChatActivity : AppCompatActivity() {
                 actualizarEstadoEnBD(msgId, -2)
             }
 
+            // ACEPTAR ACTUALIZACIÓN DEL DOBLE CHECK (status viaja en el callback)
+            P2PManager.onAckReceivedListener = { msgId, status ->
+                runOnUiThread {
+                    adapter.updateMessageStatus(msgId, status)
+                    reenviarMensajesEnEspera()
+                }
+            }
+
             P2PManager.onMessageReceivedListener = { incomingMsgId, texto, uriImagen ->
                 runOnUiThread {
                     val isRefresh = texto.contains("SYS:REFRESH_GROUP")
@@ -313,8 +326,16 @@ class ChatActivity : AppCompatActivity() {
                     val isTyping1 = texto.contains("SYS:TYPING:1")
                     val isTyping0 = texto.contains("SYS:TYPING:0")
                     val isAddTime = texto.contains("SYS:ADD_TIME:")
+                    val isReadAck = texto.startsWith("READ_ACK:")
 
                     when {
+                        isReadAck -> {
+                            val ackMsgId = texto.substringAfter("READ_ACK:").toLongOrNull()
+                            if (ackMsgId != null) {
+                                adapter.updateMessageStatus(ackMsgId, 3)
+                                actualizarEstadoEnBD(ackMsgId, 3)
+                            }
+                        }
                         isTyping1 -> { binding.tvStatus.text = "Escribiendo... ✍️"; binding.tvStatus.setTextColor(auraColor) }
                         isTyping0 -> { actualizarEstadoConexion() }
                         isRefresh -> { cargarHistorialDeMensajes() }
@@ -377,17 +398,11 @@ class ChatActivity : AppCompatActivity() {
                         }
                     }
                     reenviarMensajesEnEspera()
+                    enviarConfirmacionDeLectura() // MANDA DOBLE CHECK AL RECIBIR SI ESTÁ ABIERTO
                 }
             }
 
             P2PManager.onMessageSentListener = { msgId -> runOnUiThread { adapter.updateMessageStatus(msgId, 1); adapter.updateProgress(msgId, 100) } }
-
-            P2PManager.onAckReceivedListener = { msgId ->
-                runOnUiThread {
-                    adapter.updateMessageStatus(msgId, 2)
-                    reenviarMensajesEnEspera()
-                }
-            }
         }
 
         binding.btnBack.setOnClickListener { finish() }
@@ -408,7 +423,11 @@ class ChatActivity : AppCompatActivity() {
 
         binding.root.findViewById<View>(R.id.btnCamera)?.setOnClickListener {
             binding.root.findViewById<View>(R.id.flAttachmentMenu)?.visibility = View.GONE
-            takePictureLauncher.launch(null)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            } else {
+                takePictureLauncher.launch(null)
+            }
         }
 
         binding.root.findViewById<View>(R.id.btnFiles)?.setOnClickListener {
@@ -432,8 +451,8 @@ class ChatActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 setButtonSendIcon()
-                if (s.isNullOrEmpty() && isTyping) { isTyping = false; enviarPayloadSistema(System.currentTimeMillis(), "SYS:TYPING:0") }
-                else if (!s.isNullOrEmpty() && !isTyping) { isTyping = true; enviarPayloadSistema(System.currentTimeMillis(), "SYS:TYPING:1") }
+                if (s.isNullOrEmpty() && isTyping) { isTyping = false; enviarPayloadSistema(MsgIdGenerator.next(), "SYS:TYPING:0") }
+                else if (!s.isNullOrEmpty() && !isTyping) { isTyping = true; enviarPayloadSistema(MsgIdGenerator.next(), "SYS:TYPING:1") }
             }
         })
 
@@ -485,7 +504,6 @@ class ChatActivity : AppCompatActivity() {
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (isRecording) {
                         if (isRecordingLocked) {
-                            // Sigue grabando
                         } else {
                             val duration = System.currentTimeMillis() - recordStartMillis
                             if (duration < 1000) {
@@ -513,7 +531,7 @@ class ChatActivity : AppCompatActivity() {
             if (text.isEmpty() && image == null) return@setOnClickListener
 
             emojiHelper.hide()
-            val msgId = System.currentTimeMillis()
+            val msgId = MsgIdGenerator.next()
             val expiresAt = if (ephemeralDuration > 0) System.currentTimeMillis() + ephemeralDuration else null
 
             val newMsg = Message(msgId, text, image, true, 0, originalSender = myLocalUserId, isGroup = isGroup, expiresAt = expiresAt)
@@ -521,7 +539,7 @@ class ChatActivity : AppCompatActivity() {
             guardarMensajeEnBD(msgId, text, image?.toString(), true, 0, myLocalUserId, expiresAt)
 
             binding.etMessage.text.clear(); binding.cvImagePreview.visibility = View.GONE; selectedImageUri = null; setButtonSendIcon()
-            isTyping = false; enviarPayloadSistema(System.currentTimeMillis(), "SYS:TYPING:0")
+            isTyping = false; enviarPayloadSistema(MsgIdGenerator.next(), "SYS:TYPING:0")
 
             if (isDebugMode) enviarMensajeSimulado(msgId)
             else enviarMensajeRed(msgId, text, image, ephemeralDuration, isGroup)
@@ -589,7 +607,7 @@ class ChatActivity : AppCompatActivity() {
                 Toast.makeText(this, "Espera ${(5000 - (currentTime - lastSentNudgeTime)) / 1000}s", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            lastSentNudgeTime = currentTime; val msgId = System.currentTimeMillis()
+            lastSentNudgeTime = currentTime; val msgId = MsgIdGenerator.next()
 
             enviarPayloadSistema(msgId, "SYS:NUDGE")
             val newMsg = Message(msgId, "Enviaste un zumbido 📳", null, true, 99, originalSender = myLocalUserId, isGroup = isGroup)
@@ -700,7 +718,7 @@ class ChatActivity : AppCompatActivity() {
 
     private fun sendAudioMessage(filePath: String, durationStr: String) {
         val uri = Uri.fromFile(File(filePath))
-        val msgId = System.currentTimeMillis()
+        val msgId = MsgIdGenerator.next()
 
         val maxAmp = amplitudesRecordadas.maxOrNull()?.coerceAtLeast(1) ?: 1
         val step = if (amplitudesRecordadas.size > 35) amplitudesRecordadas.size / 35.0 else 1.0
@@ -744,7 +762,6 @@ class ChatActivity : AppCompatActivity() {
         val selectedIds = adapter.selectedMessages.toList()
         if (selectedIds.isEmpty()) return
 
-        // Usamos layoutInflater y AlertDialog para que respete el tamaño y márgenes del diseño
         val view = layoutInflater.inflate(R.layout.dialog_delete_message, null)
         val dialog = AlertDialog.Builder(this)
             .setView(view)
@@ -757,7 +774,7 @@ class ChatActivity : AppCompatActivity() {
                 val msgsToDelete = adapter.messages.filter { it.msgId in selectedIds }
                 msgsToDelete.forEach { msg -> borrarArchivoLocalUri(msg.imageUrl) }
 
-                selectedIds.forEach { msgId -> try { database.nexuDao().deleteMessageById(msgId) } catch (e: Exception) {} }
+                selectedIds.forEach { msgId -> try { database.nexuDao().deleteMessageById(msgId, myLocalUserId) } catch (e: Exception) {} }
                 withContext(Dispatchers.Main) {
                     selectedIds.forEach { msgId -> adapter.removeMessage(msgId); activeMessagesTracker.removeAll { it.msgId == msgId } }
                     adapter.clearSelection()
@@ -772,13 +789,11 @@ class ChatActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    // --- FUNCIÓN PARA COPIAR MENSAJES ---
     private fun copiarMensajesSeleccionados() {
         val selectedIds = adapter.selectedMessages.toList()
         if (selectedIds.isEmpty()) return
 
         val messagesToCopy = adapter.messages.filter { it.msgId in selectedIds }
-        // Se extrae solo el texto ignorando nulos o vacíos y separando con saltos de línea
         val textToCopy = messagesToCopy.mapNotNull { it.text }.filter { it.isNotBlank() && !it.startsWith("[Audio]") }.joinToString("\n\n")
 
         if (textToCopy.isNotEmpty()) {
@@ -798,6 +813,23 @@ class ChatActivity : AppCompatActivity() {
             val myName = prefs.getUserProfile().name
             NexuMeshManager.enviarMensajeMesh(applicationContext, myLocalUserId, myName, chatIdentifier, msgId, "TXT:$msgId:$comando")
         } catch (e: Exception) {}
+    }
+
+    // --- FUNCIÓN CLAVE PARA ENVIAR DOBLE CHECK DE COLOR AURA ---
+    private fun enviarConfirmacionDeLectura() {
+        if (isGroup) return // Confirmaciones de lectura simplificadas para chats personales
+        lifecycleScope.launch(Dispatchers.IO) {
+            val historial = database.nexuDao().getMessagesForUserSync(chatIdentifier, myLocalUserId)
+            val unread = historial.filter { !it.isMine && it.status == 0 }
+            if (unread.isNotEmpty()) {
+                val myName = prefs.getUserProfile().name
+                unread.forEach { msg ->
+                    database.nexuDao().updateStatus(msg.msgId, myLocalUserId, 3)
+                    val ackPacketId = MsgIdGenerator.next()
+                    NexuMeshManager.enviarMensajeMesh(applicationContext, myLocalUserId, myName, chatIdentifier, ackPacketId, "READ_ACK:${msg.msgId}")
+                }
+            }
+        }
     }
 
     private fun enviarMensajeRed(msgId: Long, text: String, imageUri: Uri?, duration: Long, isGroupMsg: Boolean) {
@@ -958,6 +990,7 @@ class ChatActivity : AppCompatActivity() {
         super.onResume()
         P2PManager.activeChatIdentifier = chatIdentifier; P2PManager.currentActivity = this
         cargarHistorialDeMensajes(); actualizarEstadoConexion()
+        enviarConfirmacionDeLectura() // MANDA DOBLE CHECK AL ABRIR
     }
 
     override fun onPause() {
@@ -969,7 +1002,7 @@ class ChatActivity : AppCompatActivity() {
     private fun cargarHistorialDeMensajes() {
         lifecycleScope.launch(Dispatchers.IO) {
             val historial = database.nexuDao().getMessagesForUserSync(chatIdentifier, myLocalUserId)
-            val cleanHistory = historial.filter { (it.expiresAt == null || it.expiresAt > System.currentTimeMillis()) && it.status != -1 }
+            val cleanHistory = historial.filter { (it.expiresAt == null || it.expiresAt > System.currentTimeMillis()) && it.status != -1 && it.text?.startsWith("SYS:") != true }
             withContext(Dispatchers.Main) {
                 setupRecyclerView(); activeMessagesTracker.clear()
                 cleanHistory.forEach { entidad ->
@@ -988,7 +1021,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun actualizarEstadoEnBD(msgId: Long, status: Int) {
-        lifecycleScope.launch(Dispatchers.IO) { database.nexuDao().updateStatus(msgId, status) }
+        lifecycleScope.launch(Dispatchers.IO) { database.nexuDao().updateStatus(msgId, myLocalUserId, status) }
     }
 
     private fun setupRecyclerView() {
@@ -1039,7 +1072,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun ejecutarReenvio(msg: Message, targetId: String, targetIsGroup: Boolean) {
-        val newMsgId = System.currentTimeMillis() + (Math.random() * 1000).toLong()
+        val newMsgId = MsgIdGenerator.next()
         val text = msg.text ?: ""
         val imageUri = msg.imageUrl
         val entity = MessageEntity(msgId = newMsgId, localUserId = myLocalUserId, endpointId = targetId, originalSender = myLocalUserId, isGroup = targetIsGroup, text = text, imagePath = imageUri?.toString(), isMine = true, status = 0, timestamp = System.currentTimeMillis(), expiresAt = null)

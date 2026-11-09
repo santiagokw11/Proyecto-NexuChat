@@ -165,7 +165,10 @@ class MessageAdapter(
 
     fun updateMessageStatus(msgId: Long, newStatus: Int) {
         val index = messages.indexOfFirst { it.msgId == msgId }
-        if (index != -1) { messages[index].status = newStatus; notifyItemChanged(index) }
+        if (index != -1) {
+            messages[index].status = newStatus
+            notifyItemChanged(index)
+        }
     }
 
     fun updateProgress(msgId: Long, progress: Int) {
@@ -314,7 +317,6 @@ class MessageAdapter(
                 holder.waveformSent.waveColor = ColorUtils.setAlphaComponent(Color.WHITE, 100)
                 holder.waveformSent.progressColor = Color.WHITE
 
-                // Procesador seguro para la duración y las ondas
                 if (currentMessage.text?.startsWith("[Audio]:") == true) {
                     val afterAudio = currentMessage.text!!.substringAfter("[Audio]:")
                     if (afterAudio.contains(":")) {
@@ -353,18 +355,29 @@ class MessageAdapter(
             if (currentMessage.progress in 0..99) { holder.progressBarSent.visibility = View.VISIBLE; holder.progressBarSent.progress = currentMessage.progress }
             else holder.progressBarSent.visibility = View.GONE
 
+            // LÓGICA INFALIBLE PARA MUTAR EL VECTOR Y PINTARLO
             if (currentMessage.status == -2) {
-                holder.ivRetrySent.visibility = View.VISIBLE; holder.ivMessageStatus.visibility = View.GONE
+                holder.ivRetrySent.visibility = View.VISIBLE
+                holder.ivMessageStatus.visibility = View.GONE
                 holder.ivRetrySent.setOnClickListener { onRetryClick(currentMessage) }
             } else {
-                holder.ivRetrySent.visibility = View.GONE; holder.ivMessageStatus.visibility = View.VISIBLE
-                when (currentMessage.status) {
-                    0 -> holder.ivMessageStatus.setImageResource(R.drawable.ic_msg_clock)
-                    1 -> holder.ivMessageStatus.setImageResource(R.drawable.ic_msg_sent)
-                    2 -> holder.ivMessageStatus.setImageResource(R.drawable.ic_msg_delivered)
-                    3 -> holder.ivMessageStatus.setImageResource(R.drawable.ic_msg_delivered)
+                holder.ivRetrySent.visibility = View.GONE
+                holder.ivMessageStatus.visibility = View.VISIBLE
+
+                val drawableRes = when (currentMessage.status) {
+                    0 -> R.drawable.ic_msg_clock
+                    1 -> R.drawable.ic_msg_sent
+                    else -> R.drawable.ic_msg_delivered
                 }
+
+                val colorToApply = if (currentMessage.status == 3) auraColor else Color.WHITE
+
+                // mutate() desvincula el drawable de su estado original en caché o XML
+                val drawable = ContextCompat.getDrawable(holder.itemView.context, drawableRes)?.mutate()
+                drawable?.setTint(colorToApply)
+                holder.ivMessageStatus.setImageDrawable(drawable)
             }
+
         } else {
             holder.layoutReceived.visibility = View.VISIBLE
             holder.tvTimeReceived.text = timeString

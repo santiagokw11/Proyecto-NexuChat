@@ -43,6 +43,7 @@ import com.offline.nexu.ui.home.GlobalNotifications
 import com.offline.nexu.ui.profile.ProfileActivity
 import com.offline.nexu.ui.settings.SettingsActivity
 import com.offline.nexu.data.network.NexuMeshManager
+import com.offline.nexu.utils.MsgIdGenerator
 import com.offline.nexu.utils.ThemeUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -145,6 +146,7 @@ class ChatsListActivity : AppCompatActivity() {
         configurarMenuLateral()
         iniciarLimpiezaEfimeros()
         iniciarMonitorConexion()
+        iniciarObservadorDeBaseDeDatos() // Activamos la escucha en tiempo real
     }
 
     private fun updateBellBadge() {
@@ -588,7 +590,7 @@ class ChatsListActivity : AppCompatActivity() {
                             database.nexuDao().updateGroupExpiration(groupId, newExpirationTime)
                             val myName = prefs.getUserProfile().name
                             val cmd = "SYS:ADD_TIME:$groupId:$newExpirationTime"
-                            NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, myName, groupId, System.currentTimeMillis(), "TXT:0:$cmd")
+                            NexuMeshManager.enviarMensajeGrupoMesh(applicationContext, myLocalUserId, myName, groupId, MsgIdGenerator.next(), "TXT:0:$cmd")
 
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(this@ChatsListActivity, "Tiempo extra añadido", Toast.LENGTH_SHORT).show()
@@ -711,7 +713,7 @@ class ChatsListActivity : AppCompatActivity() {
                 database.nexuDao().deleteAllMessagesFrom(endpointId, myLocalUserId)
 
                 val dummyMsg = MessageEntity(
-                    msgId = System.currentTimeMillis(),
+                    msgId = MsgIdGenerator.next(),
                     localUserId = myLocalUserId,
                     endpointId = endpointId,
                     originalSender = endpointId,
@@ -934,52 +936,66 @@ class ChatsListActivity : AppCompatActivity() {
         return sharedPreferences.getBoolean("pinned_${myLocalUserId}_${endpointId}", false)
     }
 
+    // NUEVO: Escucha continuamente los cambios en la base de datos y actualiza la UI
+    private fun iniciarObservadorDeBaseDeDatos() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            database.nexuDao().getRecentChatsFlow(myLocalUserId).collect { recentMessages ->
+                procesarChatsUI(recentMessages)
+            }
+        }
+    }
+
+    // NUEVO: Extraemos la lógica de UI aquí para no duplicar código
+    private suspend fun procesarChatsUI(recentMessages: List<MessageEntity>) {
+        val sharedPreferences = getSharedPreferences("NexuPrefs", Context.MODE_PRIVATE)
+        val currentTime = System.currentTimeMillis()
+
+        val uiList = recentMessages.map { msg ->
+            val isPinned = isChatPinned(msg.endpointId)
+
+            val group = if (msg.isGroup) database.nexuDao().getGroup(msg.endpointId) else null
+            val displayTitle = if (msg.isGroup) group?.groupName ?: "Grupo" else msg.endpointId
+            val avatar = if (msg.isGroup) group?.groupAvatar ?: "👥" else prefs.getContactAvatar(msg.endpointId)
+
+            val mutedUntil = sharedPreferences.getLong("muted_until_${myLocalUserId}_${msg.endpointId}", 0L)
+            val isMuted = mutedUntil == -1L || mutedUntil > currentTime
+
+            val unreadCount = database.nexuDao().getUnreadCount(msg.endpointId, myLocalUserId)
+            val forceUnread = sharedPreferences.getBoolean("force_unread_${myLocalUserId}_${msg.endpointId}", false)
+
+            val isOnline = !msg.isGroup && (
+                    P2PManager.connectedNames.containsKey(msg.endpointId) ||
+                            P2PManager.connectedNames.containsValue(msg.endpointId) ||
+                            NexuMeshManager.connectedEndpoints.contains(msg.endpointId)
+                    )
+
+            ChatItemUI(msg, isPinned, displayTitle, avatar, group?.expirationTime, isMuted, unreadCount, forceUnread, isOnline)
+        }.sortedWith(compareByDescending<ChatItemUI> { it.isPinned }.thenByDescending { it.entity.timestamp })
+
+        withContext(Dispatchers.Main) {
+            activeChatsTracker = uiList
+
+            if (binding.etSearch.visibility == View.VISIBLE && binding.etSearch.text.isNotEmpty()) {
+                filtrarChats(binding.etSearch.text.toString())
+            } else {
+                val emptyState = findViewById<TextView>(R.id.tvEmptyState)
+
+                if (uiList.isEmpty()) {
+                    binding.rvChats.visibility = View.GONE
+                    emptyState?.visibility = View.VISIBLE
+                } else {
+                    binding.rvChats.visibility = View.VISIBLE
+                    emptyState?.visibility = View.GONE
+                    adapter.submitList(uiList)
+                }
+            }
+        }
+    }
+
     private fun cargarChats() {
         lifecycleScope.launch(Dispatchers.IO) {
             val recentMessages = database.nexuDao().getRecentChats(myLocalUserId)
-            val sharedPreferences = getSharedPreferences("NexuPrefs", Context.MODE_PRIVATE)
-            val currentTime = System.currentTimeMillis()
-
-            val uiList = recentMessages.map { msg ->
-                val isPinned = isChatPinned(msg.endpointId)
-
-                val group = if (msg.isGroup) database.nexuDao().getGroup(msg.endpointId) else null
-                val displayTitle = if (msg.isGroup) group?.groupName ?: "Grupo" else msg.endpointId
-                val avatar = if (msg.isGroup) group?.groupAvatar ?: "👥" else prefs.getContactAvatar(msg.endpointId)
-
-                val mutedUntil = sharedPreferences.getLong("muted_until_${myLocalUserId}_${msg.endpointId}", 0L)
-                val isMuted = mutedUntil == -1L || mutedUntil > currentTime
-
-                val unreadCount = database.nexuDao().getUnreadCount(msg.endpointId, myLocalUserId)
-                val forceUnread = sharedPreferences.getBoolean("force_unread_${myLocalUserId}_${msg.endpointId}", false)
-
-                val isOnline = !msg.isGroup && (
-                        P2PManager.connectedNames.containsKey(msg.endpointId) ||
-                                P2PManager.connectedNames.containsValue(msg.endpointId) ||
-                                NexuMeshManager.connectedEndpoints.contains(msg.endpointId)
-                        )
-
-                ChatItemUI(msg, isPinned, displayTitle, avatar, group?.expirationTime, isMuted, unreadCount, forceUnread, isOnline)
-            }.sortedWith(compareByDescending<ChatItemUI> { it.isPinned }.thenByDescending { it.entity.timestamp })
-
-            withContext(Dispatchers.Main) {
-                activeChatsTracker = uiList
-
-                if (binding.etSearch.visibility == View.VISIBLE && binding.etSearch.text.isNotEmpty()) {
-                    filtrarChats(binding.etSearch.text.toString())
-                } else {
-                    val emptyState = findViewById<TextView>(R.id.tvEmptyState)
-
-                    if (uiList.isEmpty()) {
-                        binding.rvChats.visibility = View.GONE
-                        emptyState?.visibility = View.VISIBLE
-                    } else {
-                        binding.rvChats.visibility = View.VISIBLE
-                        emptyState?.visibility = View.GONE
-                        adapter.submitList(uiList)
-                    }
-                }
-            }
+            procesarChatsUI(recentMessages)
         }
     }
 

@@ -1,11 +1,13 @@
 package com.offline.nexu.data.local.db
 
 import androidx.room.Entity
-import androidx.room.PrimaryKey
 
-@Entity(tableName = "messages")
+// Clave compuesta: msgId solo no es único entre cuentas (multicuenta) ni garantiza
+// no colisionar entre chats distintos; sin esto, OnConflictStrategy.REPLACE podía
+// pisar silenciosamente un mensaje de otra cuenta/chat que compartiera el mismo msgId.
+@Entity(tableName = "messages", primaryKeys = ["msgId", "localUserId"])
 data class MessageEntity(
-    @PrimaryKey val msgId: Long,
+    val msgId: Long,
     val localUserId: String,
     val endpointId: String,
     val originalSender: String?,

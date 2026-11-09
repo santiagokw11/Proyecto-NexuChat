@@ -211,7 +211,6 @@
                 android:id="@+id/ivMessageStatus"
                 android:layout_width="14dp"
                 android:layout_height="14dp"
-                app:tint="#FFFFFF"
                 android:src="@drawable/ic_msg_clock" />
         </LinearLayout>
 

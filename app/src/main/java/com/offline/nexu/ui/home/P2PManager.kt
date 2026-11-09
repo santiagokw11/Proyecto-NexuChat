@@ -18,6 +18,7 @@ import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.offline.nexu.ConnectionService
 import com.offline.nexu.R
 import com.offline.nexu.data.local.Prefs
+import com.offline.nexu.utils.MsgIdGenerator
 import com.offline.nexu.data.local.db.AppDatabase
 import com.offline.nexu.data.local.db.MessageEntity
 import com.offline.nexu.data.model.UserProfile
@@ -45,7 +46,10 @@ object P2PManager {
     var onMessageReceivedListener: ((Long, String, Uri?) -> Unit)? = null
     var onMessageSentListener: ((Long) -> Unit)? = null
     var onMessageFailedListener: ((Long) -> Unit)? = null
-    var onAckReceivedListener: ((Long) -> Unit)? = null
+
+    // MODIFICADO: Ahora envía el msgId y el status (2 o 3)
+    var onAckReceivedListener: ((Long, Int) -> Unit)? = null
+
     var onDistanceEstimatedListener: ((String) -> Unit)? = null
     var onProfileReceivedListener: ((String, String, String) -> Unit)? = null
     var onPayloadProgress: ((Long, Int) -> Unit)? = null
@@ -99,7 +103,7 @@ object P2PManager {
 
                 if (!exists) {
                     val dummyMsg = MessageEntity(
-                        msgId = System.currentTimeMillis(),
+                        msgId = MsgIdGenerator.next(),
                         localUserId = myLocalUserId,
                         endpointId = endpointId,
                         originalSender = endpointName,
@@ -132,23 +136,18 @@ object P2PManager {
                 val prefs = Prefs(ctx)
                 val myLocalUserId = prefs.getUserProfile().id
                 val myName = prefs.getUserProfile().name
-                val recentChats = db.nexuDao().getRecentChats(myLocalUserId)
+                // Usamos los endpoints con mensajes pendientes reales (incluye comandos SYS: de
+                // grupo), no getRecentChats: esa lista ignora chats cuyo único mensaje es un SYS:
+                // pendiente (ej. invitado nuevo a un grupo sin chat 1:1 previo).
+                val pendingEndpoints = db.nexuDao().getEndpointsWithPendingMessages(myLocalUserId)
 
                 val eps = NexuMeshManager.connectedEndpoints.toList()
                 if (eps.isEmpty()) { isGlobalSyncing = false; return@launch }
 
-                for (chat in recentChats) {
-                    val targetId = chat.endpointId
-
-                    if (chat.isGroup) {
-                        val group = db.nexuDao().getGroup(targetId)
-                        val members = group?.members?.split(",")?.map{it.trim()} ?: emptyList()
-                        val anyConnected = members.any { m -> m != myLocalUserId && (connectedNames.containsValue(m) || NexuMeshManager.connectedEndpoints.contains(m)) }
-                        if (!anyConnected) continue
-                    } else {
-                        if (!connectedNames.containsValue(targetId) && !NexuMeshManager.connectedEndpoints.contains(targetId)) continue
-                    }
-
+                // Con cualquier conexión activa reintentamos: el paquete MESH/GMESH viaja hasta
+                // 4 saltos por reenvío (TTL), así que exigir vecino directo del destinatario
+                // dejaba miembros de grupo sin recibir la invitación/actualización indefinidamente.
+                for (targetId in pendingEndpoints) {
                     val historial = db.nexuDao().getMessagesForUserSync(targetId, myLocalUserId)
                     val pendientes = historial.filter { it.isMine && (it.status == 0 || it.status == 1 || it.status == -2) }
 
@@ -228,18 +227,27 @@ object P2PManager {
                     if (data.startsWith("PING:") || data.startsWith("PONG:")) {
                         // Latency pings
                     } else if (data.startsWith("SYS:GROUP_CREATE|")) {
+                        // El ACK real ya lo envía NexuMeshManager al desempacar el paquete MESH con el msgId correcto.
+                        Log.d("NexuGroupDebug", "P2PManager dispatch SYS:GROUP_CREATE| context=${context != null}")
                         context?.let { GroupManager.handleGroupCreateCommand(it, data, endpointId) }
-                        sendAck(endpointId, System.currentTimeMillis())
                     } else if (data.startsWith("SYS:GROUP_UPDATE|")) {
+                        Log.d("NexuGroupDebug", "P2PManager dispatch SYS:GROUP_UPDATE| context=${context != null}")
                         context?.let { GroupManager.handleGroupUpdateCommand(it, data) }
-                        sendAck(endpointId, System.currentTimeMillis())
-                    } else if (data.startsWith("ACK:")) {
+                    } else if (data.startsWith("ACK:")) { // Doble Check Gris
                         val msgId = data.substringAfter("ACK:").toLongOrNull()
                         if (msgId != null) {
                             CoroutineScope(Dispatchers.IO).launch {
-                                context?.let { ctx -> AppDatabase.getDatabase(ctx).nexuDao().updateStatus(msgId, 2) }
+                                context?.let { ctx -> AppDatabase.getDatabase(ctx).nexuDao().updateStatus(msgId, Prefs(ctx).getUserProfile().id, 2) }
                             }
-                            onAckReceivedListener?.invoke(msgId)
+                            onAckReceivedListener?.invoke(msgId, 2)
+                        }
+                    } else if (data.startsWith("READ_ACK:")) { // Doble Check Azul
+                        val msgId = data.substringAfter("READ_ACK:").toLongOrNull()
+                        if (msgId != null) {
+                            CoroutineScope(Dispatchers.IO).launch {
+                                context?.let { ctx -> AppDatabase.getDatabase(ctx).nexuDao().updateStatus(msgId, Prefs(ctx).getUserProfile().id, 3) }
+                            }
+                            onAckReceivedListener?.invoke(msgId, 3)
                         }
                     } else if (data.startsWith("TXT:") || data.startsWith("EPH:")) {
                         val isEph = data.startsWith("EPH:")
@@ -247,7 +255,7 @@ object P2PManager {
 
                         if (parts.size >= 3) {
                             val msgIdParsed = parts[1].toLongOrNull() ?: 0L
-                            val finalMsgId = if (msgIdParsed == 0L) System.currentTimeMillis() else msgIdParsed
+                            val finalMsgId = if (msgIdParsed == 0L) MsgIdGenerator.next() else msgIdParsed
                             val content = if (isEph) parts[3] else parts[2]
                             val duration = if (isEph) parts[2].toLongOrNull() ?: 0L else 0L
 
@@ -286,7 +294,7 @@ object P2PManager {
 
                                 if (subParts.size >= 3) {
                                     val msgIdParsed = subParts[1].toLongOrNull() ?: 0L
-                                    val finalMsgId = if (msgIdParsed == 0L) System.currentTimeMillis() else msgIdParsed
+                                    val finalMsgId = if (msgIdParsed == 0L) MsgIdGenerator.next() else msgIdParsed
                                     val content = if (isEph) subParts[3] else subParts[2]
                                     val duration = if (isEph) subParts[2].toLongOrNull() ?: 0L else 0L
 
@@ -334,7 +342,7 @@ object P2PManager {
                 if (outgoingPayloadsTracker.containsKey(update.payloadId)) {
                     val msgId = outgoingPayloadsTracker.remove(update.payloadId)!!
                     CoroutineScope(Dispatchers.IO).launch {
-                        context?.let { ctx -> AppDatabase.getDatabase(ctx).nexuDao().updateStatus(msgId, 1) }
+                        context?.let { ctx -> AppDatabase.getDatabase(ctx).nexuDao().updateStatus(msgId, Prefs(ctx).getUserProfile().id, 1) }
                     }
                     onMessageSentListener?.invoke(msgId)
                 }
@@ -352,6 +360,7 @@ object P2PManager {
                     }
                 }
 
+                Log.d("NexuGroupDebug", "PayloadTransferUpdate SUCCESS id=${update.payloadId} expected=${expectedChatImages.containsKey(update.payloadId)} incomingFile=${incomingFilePayloads.containsKey(update.payloadId)} context=${context != null}")
                 if (expectedChatImages.containsKey(update.payloadId)) {
                     val msgInfo = expectedChatImages.remove(update.payloadId)!!
                     val filePayload = incomingFilePayloads.remove(update.payloadId)
@@ -395,7 +404,7 @@ object P2PManager {
                 if (outgoingPayloadsTracker.containsKey(update.payloadId)) {
                     val msgId = outgoingPayloadsTracker.remove(update.payloadId)!!
                     CoroutineScope(Dispatchers.IO).launch {
-                        context?.let { ctx -> AppDatabase.getDatabase(ctx).nexuDao().updateStatus(msgId, -2) }
+                        context?.let { ctx -> AppDatabase.getDatabase(ctx).nexuDao().updateStatus(msgId, Prefs(ctx).getUserProfile().id, -2) }
                     }
                     onMessageFailedListener?.invoke(msgId)
                 }
@@ -428,23 +437,42 @@ object P2PManager {
 
             val msgStatus = if (isNudge || isEvent) 99 else 0
 
-            val entity = MessageEntity(
-                msgId = msgId,
-                localUserId = localUserId,
-                endpointId = chatId,
-                originalSender = senderName,
-                isGroup = isGroup,
-                text = dbText,
-                imagePath = uri?.toString(),
-                isMine = false,
-                status = msgStatus,
-                timestamp = System.currentTimeMillis(),
-                expiresAt = expiresAt
-            )
-
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     val db = AppDatabase.getDatabase(ctx)
+
+                    val exists = db.nexuDao().getRecentChats(localUserId).any { it.endpointId == chatId }
+                    if (!exists) {
+                        val isGroupChat = chatId.startsWith("GRP_")
+                        val dummyMsg = MessageEntity(
+                            msgId = MsgIdGenerator.next(),
+                            localUserId = localUserId,
+                            endpointId = chatId,
+                            originalSender = senderName,
+                            isGroup = isGroupChat,
+                            text = "Chat inicializado",
+                            imagePath = null,
+                            isMine = false,
+                            status = -1,
+                            timestamp = System.currentTimeMillis() - 1000
+                        )
+                        db.nexuDao().insertMessage(dummyMsg)
+                    }
+
+                    val entity = MessageEntity(
+                        msgId = msgId,
+                        localUserId = localUserId,
+                        endpointId = chatId,
+                        originalSender = senderName,
+                        isGroup = isGroup,
+                        text = dbText,
+                        imagePath = uri?.toString(),
+                        isMine = false,
+                        status = msgStatus,
+                        timestamp = System.currentTimeMillis(),
+                        expiresAt = expiresAt
+                    )
+
                     db.nexuDao().insertMessage(entity)
 
                     val chatTitle = if(isGroup) {
@@ -550,7 +578,6 @@ object P2PManager {
             val ext = when(type) { "VID" -> ".mp4"; "DOC" -> ".pdf"; "AUD" -> ".ogg"; else -> ".jpg" }
             val prefix = when(type) { "VID" -> "VID_"; "DOC" -> "DOC_"; "AUD" -> "AUD_"; "PROFILE" -> "PROF_"; else -> "IMG_" }
 
-            // Usando directorio público, SIN subcarpeta /Sent para mensajes recibidos
             val baseMediaDir = context!!.externalMediaDirs.firstOrNull() ?: context!!.getExternalFilesDir(null)
             val mediaDir = File(baseMediaDir, "NexuChat/Media/$subFolder")
             if (!mediaDir.exists()) mediaDir.mkdirs()

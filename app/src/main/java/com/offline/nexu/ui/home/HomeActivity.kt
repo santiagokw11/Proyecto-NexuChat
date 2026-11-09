@@ -3,6 +3,7 @@ package com.offline.nexu.ui.home
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
@@ -57,7 +58,7 @@ object GlobalNotifications {
     )
     val pendingNotifications = mutableListOf<NotificationItem>()
     val rejectedConnectionsCount = mutableMapOf<String, Int>()
-    const val MAX_REJECTS = 3 // <-- MOVIDO AQUÍ PARA QUE SEA ACCESIBLE GLOBALMENTE
+    const val MAX_REJECTS = 3
 
     private val listeners = mutableListOf<() -> Unit>()
 
@@ -88,9 +89,11 @@ class HomeActivity : AppCompatActivity() {
 
     private lateinit var database: AppDatabase
     private lateinit var myLocalUserId: String
+    private lateinit var sharedSettings: SharedPreferences
 
     private var isActivityVisible = false
     private var isRadarActive = true
+    private var isVisibleToOthers = true // Nuevo estado para privacidad en red
 
     private val endpointNamesTemp = mutableMapOf<String, String>()
 
@@ -103,6 +106,11 @@ class HomeActivity : AppCompatActivity() {
 
         database = AppDatabase.getDatabase(this)
         myLocalUserId = Prefs(this).getUserProfile().id
+        sharedSettings = getSharedPreferences("NexuSettings", Context.MODE_PRIVATE)
+
+        // Cargar estado inicial del radar sincronizado con privacidad
+        isVisibleToOthers = !sharedSettings.getBoolean("radar_hidden", false)
+        actualizarIconoVisibilidad()
 
         cargarPerfilUsuario()
 
@@ -149,6 +157,35 @@ class HomeActivity : AppCompatActivity() {
         binding.btnToggleRadar.setOnClickListener {
             isRadarActive = !isRadarActive
             actualizarEstadoRadar()
+        }
+
+        // Listener sincronizado para el botón de privacidad
+        binding.btnVisibilityRadar.setOnClickListener {
+            isVisibleToOthers = !isVisibleToOthers
+
+            // Guardar instantáneamente para que SettingsPrivacyActivity lo lea
+            sharedSettings.edit().putBoolean("radar_hidden", !isVisibleToOthers).apply()
+
+            actualizarIconoVisibilidad()
+
+            if (isVisibleToOthers) {
+                Toast.makeText(this, "Radar visible: Los demás pueden encontrarte", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Modo fantasma: Eres invisible para los demás", Toast.LENGTH_SHORT).show()
+            }
+
+            // Aplicamos el cambio deteniendo la emisión pero manteniendo activo el radar visual
+            if (isRadarActive && hasPermissions() && !isDebugMode) {
+                val client = Nearby.getConnectionsClient(applicationContext)
+                client.stopAdvertising() // Detenemos explícitamente la emisión
+                if (isVisibleToOthers) {
+                    binding.tvRadarStatus.text = "Escaneando colmena..."
+                    val options = AdvertisingOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()
+                    try { client.startAdvertising(miPerfilP2P, SERVICE_ID, connectionLifecycleCallback, options) } catch (e: Exception) {}
+                } else {
+                    binding.tvRadarStatus.text = "Escaneando en modo fantasma..."
+                }
+            }
         }
 
         binding.btnRefreshRadar.setOnClickListener {
@@ -202,6 +239,16 @@ class HomeActivity : AppCompatActivity() {
         }
 
         setupEasterEgg()
+    }
+
+    private fun actualizarIconoVisibilidad() {
+        if (isVisibleToOthers) {
+            binding.btnVisibilityRadar.setImageResource(R.drawable.ic_visibility_on)
+            binding.btnVisibilityRadar.alpha = 1.0f
+        } else {
+            binding.btnVisibilityRadar.setImageResource(R.drawable.ic_visibility_off)
+            binding.btnVisibilityRadar.alpha = 0.5f
+        }
     }
 
     private fun toggleNotificationsMenu() {
@@ -359,7 +406,7 @@ class HomeActivity : AppCompatActivity() {
 
         if (isRadarActive) {
             binding.btnToggleRadar.setColorFilter(auraColor)
-            binding.tvRadarStatus.text = "Escaneando colmena..."
+            binding.tvRadarStatus.text = if (isVisibleToOthers) "Escaneando colmena..." else "Escaneando en modo fantasma..."
             binding.radarView.invalidate()
             if (hasPermissions() && !isDebugMode) {
                 iniciarRadarP2P()
@@ -403,6 +450,7 @@ class HomeActivity : AppCompatActivity() {
         binding.ivBell.setColorFilter(auraColor)
         binding.btnToggleRadar.setColorFilter(auraColor)
         binding.btnRefreshRadar.setColorFilter(auraColor)
+        binding.btnVisibilityRadar.setColorFilter(auraColor)
 
         val navColors = ThemeUtils.getBottomNavColorStateList(auraColor)
         binding.bottomNavigation.itemIconTintList = navColors
@@ -438,6 +486,11 @@ class HomeActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         isActivityVisible = true
+
+        // Sincronizar el estado del radar por si se cambió desde Configuración de Privacidad
+        isVisibleToOthers = !sharedSettings.getBoolean("radar_hidden", false)
+        actualizarIconoVisibilidad()
+
         GlobalNotifications.addListener(badgeListener)
         updateBellBadge()
         cargarPerfilUsuario()
@@ -524,12 +577,19 @@ class HomeActivity : AppCompatActivity() {
 
     private fun iniciarRadarP2P() {
         if (isDebugMode) return
-        binding.tvRadarStatus.text = "Buscando colmena P2P..."
-        val options = AdvertisingOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()
-        try { Nearby.getConnectionsClient(applicationContext).startAdvertising(miPerfilP2P, SERVICE_ID, connectionLifecycleCallback, options) } catch (e: Exception) {}
+
+        val client = Nearby.getConnectionsClient(applicationContext)
+
+        if (isVisibleToOthers) {
+            binding.tvRadarStatus.text = "Buscando colmena P2P..."
+            val options = AdvertisingOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()
+            try { client.startAdvertising(miPerfilP2P, SERVICE_ID, connectionLifecycleCallback, options) } catch (e: Exception) { e.printStackTrace() }
+        } else {
+            binding.tvRadarStatus.text = "Escaneando en modo fantasma..."
+        }
 
         val discoveryOptions = DiscoveryOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()
-        try { Nearby.getConnectionsClient(applicationContext).startDiscovery(SERVICE_ID, endpointDiscoveryCallback, discoveryOptions) } catch (e: Exception) {}
+        try { client.startDiscovery(SERVICE_ID, endpointDiscoveryCallback, discoveryOptions) } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun loadCircularAvatar(uriString: String): Bitmap? {
@@ -665,7 +725,9 @@ class HomeActivity : AppCompatActivity() {
                         val notif = GlobalNotifications.NotificationItem(endpointId, nombre, emoji, false)
                         gestionarNuevaNotificacion(notif)
                     } else if (!isConnected) {
-                        binding.tvRadarStatus.text = "¡Nodo encontrado en el área!"
+                        if(isVisibleToOthers) {
+                            binding.tvRadarStatus.text = "¡Nodo encontrado en el área!"
+                        }
                     }
                 }
             }
@@ -733,9 +795,10 @@ class HomeActivity : AppCompatActivity() {
                 P2PManager.sendProfileHandshake(endpointId, Prefs(applicationContext).getUserProfile(), applicationContext)
 
                 Toast.makeText(this@HomeActivity, "Conexión establecida con $nombreDestino", Toast.LENGTH_SHORT).show()
+                binding.tvRadarStatus.text = if (isVisibleToOthers) "Buscando colmena P2P..." else "Escaneando en modo fantasma..."
             } else {
                 Toast.makeText(this@HomeActivity, "Conexión rechazada o fallida", Toast.LENGTH_SHORT).show()
-                binding.tvRadarStatus.text = "Buscando colmena P2P..."
+                binding.tvRadarStatus.text = if (isVisibleToOthers) "Buscando colmena P2P..." else "Escaneando en modo fantasma..."
                 if (P2PManager.currentEndpointId == endpointId) {
                     P2PManager.currentEndpointId = null
                     P2PManager.currentEndpointName = null

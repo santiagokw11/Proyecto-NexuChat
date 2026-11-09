@@ -227,7 +227,7 @@
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:src="@android:drawable/ic_secure"
+                            android:src="@drawable/ic_encrypted"
                             app:tint="@color/primary_color" />
 
                         <LinearLayout

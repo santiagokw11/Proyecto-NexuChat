@@ -3,6 +3,7 @@ package com.offline.nexu.ui.profile
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -13,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -22,7 +24,9 @@ import com.offline.nexu.data.local.db.AppDatabase
 import com.offline.nexu.ui.chat.ChatsListActivity
 import com.offline.nexu.ui.chat.helpers.AttachmentHelper
 import com.offline.nexu.ui.chat.helpers.EmojiHelper
+import com.offline.nexu.data.network.NexuMeshManager
 import com.offline.nexu.ui.home.HomeActivity
+import com.offline.nexu.ui.home.P2PManager
 import com.offline.nexu.ui.settings.SettingsActivity
 import com.offline.nexu.utils.ThemeUtils
 import kotlinx.coroutines.Dispatchers
@@ -57,7 +61,6 @@ class ProfileActivity : AppCompatActivity() {
         val etName = findViewById<EditText>(R.id.etName)
         val etStatusMessage = findViewById<EditText>(R.id.etStatusMessage)
 
-        // Usamos null safety por si llegaste a eliminar el campo de emoji del XML
         val etMoodEmoji = findViewById<EditText?>(R.id.etMoodEmoji)
 
         etMoodEmoji?.isFocusable = false
@@ -147,6 +150,13 @@ class ProfileActivity : AppCompatActivity() {
             )
 
             prefs.saveUserProfile(newProfile)
+
+            // Sin esto, los ya conectados se quedaban con la foto/nombre viejo: el handshake
+            // de perfil solo se mandaba una vez, al conectar, nunca al editar el perfil después.
+            NexuMeshManager.connectedEndpoints.toList().forEach { endpointId ->
+                P2PManager.sendProfileHandshake(endpointId, newProfile, applicationContext)
+            }
+
             Toast.makeText(this, "Identidad actualizada en la Colmena", Toast.LENGTH_SHORT).show()
         }
 
@@ -231,7 +241,6 @@ class ProfileActivity : AppCompatActivity() {
             val colorInt = Color.parseColor(hexCode)
             tvProfileTitle.setTextColor(colorInt)
 
-            // Colorea la flechita del acordeón con el color del Aura también
             findViewById<ImageView>(R.id.ivStatsArrow)?.setColorFilter(colorInt)
 
             avatarImageView.backgroundTintList = ColorStateList.valueOf(colorInt)
@@ -240,6 +249,35 @@ class ProfileActivity : AppCompatActivity() {
             val navColors = ThemeUtils.getBottomNavColorStateList(colorInt)
             bottomNavigation.itemIconTintList = navColors
             bottomNavigation.itemTextColor = navColors
+
+            // 1. Pintar la flecha desplegable del emoji del color del Aura
+            val etMoodEmoji = findViewById<EditText>(R.id.etMoodEmoji)
+            val drawables = etMoodEmoji.compoundDrawablesRelative
+            if (drawables[2] != null) { // Índice 2 es el drawableEnd
+                drawables[2].setTint(colorInt)
+            }
+
+            // 2. Lógica de borde resaltado (Focus Effect) para los campos de texto
+            val defaultBorderColor = ContextCompat.getColor(this, R.color.input_border)
+            val dpToPx = resources.displayMetrics.density
+            val defaultWidth = (1 * dpToPx).toInt()
+            val focusedWidth = (2 * dpToPx).toInt() // Borde un poco más grueso al enfocar
+
+            val etName = findViewById<EditText>(R.id.etName)
+            val etStatusMessage = findViewById<EditText>(R.id.etStatusMessage)
+
+            val focusListener = View.OnFocusChangeListener { v, hasFocus ->
+                val bg = v.background.mutate()
+                if (bg is GradientDrawable) {
+                    val strokeWidth = if (hasFocus) focusedWidth else defaultWidth
+                    val strokeColor = if (hasFocus) colorInt else defaultBorderColor
+                    bg.setStroke(strokeWidth, strokeColor)
+                }
+            }
+
+            etName?.onFocusChangeListener = focusListener
+            etStatusMessage?.onFocusChangeListener = focusListener
+
         } catch (e: Exception) {
             e.printStackTrace()
         }
