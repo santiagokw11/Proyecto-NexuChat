@@ -106,7 +106,10 @@ class NexuMeshManager(private val context: Context, private val nickname: String
                         } else if (data.startsWith("BATT:")) {
                             val pct = data.substringAfter("BATT:").toIntOrNull()
                             val name = P2PManager.connectedNames[endpointId]
-                            if (pct != null && name != null) P2PManager.contactBatteryLevels[name] = pct
+                            if (pct != null && name != null) {
+                                P2PManager.contactBatteryLevels[name] = pct
+                                P2PManager.onBatteryUpdateListener?.invoke(name, pct)
+                            }
                             return
                         } else if (data.startsWith("PUBKEY:")) {
                             // Intercambio de llave pública con el vecino directo: habilita el
@@ -339,15 +342,23 @@ class NexuMeshManager(private val context: Context, private val nickname: String
 
             val partes = connectionInfo.endpointName.split("|")
             val nombreReal = if (partes.size > 1) partes[1] else connectionInfo.endpointName
+            val emojiReal = if (partes.size > 1) partes[0] else "👤"
             endpointNames[endpointId] = nombreReal
 
+            // Join automático de malla (iniciarModoWalkieTalkie/onEndpointFound): el nombre viaja
+            // "plano", sin el formato "emoji|nombre|deviceId" que sí usan las conexiones pedidas
+            // a propósito por un humano (HomeActivity.preguntarSiConectar, etc.). Solo notar la
+            // presencia de un dispositivo nunca debe mostrar "quiere conectarse": se acepta en
+            // silencio para armar la malla, igual que antes se hacía con PING/PONG.
+            val esAutoJoinMesh = partes.size <= 1
+
             val activeActivity = P2PManager.currentActivity
-            if (P2PManager.currentEndpointName == nombreReal || P2PManager.activeChatIdentifier == nombreReal) {
+            if (esAutoJoinMesh || P2PManager.currentEndpointName == nombreReal || P2PManager.activeChatIdentifier == nombreReal) {
                 connectionsClient.acceptConnection(endpointId, payloadCallback)
             } else if (activeActivity != null && activeActivity::class.java.simpleName != "ChatActivity" && activeActivity::class.java.simpleName != "HomeActivity") {
-                mostrarNotificacionConexion(endpointId, nombreReal)
+                mostrarNotificacionConexion(endpointId, nombreReal, emojiReal)
             } else if (activeActivity == null) {
-                mostrarNotificacionConexion(endpointId, nombreReal)
+                mostrarNotificacionConexion(endpointId, nombreReal, emojiReal)
             }
         }
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
@@ -466,7 +477,18 @@ class NexuMeshManager(private val context: Context, private val nickname: String
         }
     }
 
-    private fun mostrarNotificacionConexion(endpointId: String, endpointName: String) {
+    private fun mostrarNotificacionConexion(endpointId: String, endpointName: String, endpointEmoji: String = "👤") {
+        // Antes esta función solo mandaba el push de sistema: si se perdía/descartaba, la
+        // solicitud nunca quedaba en la campanita (GlobalNotifications), que es el store real
+        // que lee HomeActivity para el badge y el dropdown.
+        val yaExiste = com.offline.nexu.ui.home.GlobalNotifications.pendingNotifications.any { it.endpointId == endpointId }
+        if (!yaExiste) {
+            com.offline.nexu.ui.home.GlobalNotifications.pendingNotifications.add(
+                com.offline.nexu.ui.home.GlobalNotifications.NotificationItem(endpointId, endpointName, endpointEmoji, true)
+            )
+            com.offline.nexu.ui.home.GlobalNotifications.notifyBadgeUpdate()
+        }
+
         val channelId = "nexu_connections"
         val notifManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

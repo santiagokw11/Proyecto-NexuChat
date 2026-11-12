@@ -152,7 +152,7 @@ class MessageAdapter(
 
     fun addMessage(message: Message) {
         if (messages.any { it.msgId == message.msgId }) return
-        val insertIndex = messages.indexOfFirst { it.msgId > message.msgId }
+        val insertIndex = messages.indexOfFirst { it.timestamp > message.timestamp }
         if (insertIndex == -1) {
             messages.add(message)
             notifyItemInserted(messages.size - 1)
@@ -260,15 +260,15 @@ class MessageAdapter(
         if (position == 0) showDateSeparator = true
         else {
             val previousMessage = messages[position - 1]
-            if (!isSameDay(previousMessage.msgId, currentMessage.msgId)) showDateSeparator = true
+            if (!isSameDay(previousMessage.timestamp, currentMessage.timestamp)) showDateSeparator = true
         }
 
         if (showDateSeparator) {
             holder.tvDateSeparator.visibility = View.VISIBLE
-            holder.tvDateSeparator.text = getDateLabel(currentMessage.msgId)
+            holder.tvDateSeparator.text = getDateLabel(currentMessage.timestamp)
         } else holder.tvDateSeparator.visibility = View.GONE
 
-        val timeString = timeFormat.format(Date(currentMessage.msgId))
+        val timeString = timeFormat.format(Date(currentMessage.timestamp))
 
         holder.tvSystemMessage.visibility = View.GONE
         holder.layoutSent.visibility = View.GONE

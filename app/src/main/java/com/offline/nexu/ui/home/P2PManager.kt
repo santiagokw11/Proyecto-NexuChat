@@ -58,6 +58,11 @@ object P2PManager {
     var onProfileReceivedListener: ((String, String, String) -> Unit)? = null
     var onPayloadProgress: ((Long, Int) -> Unit)? = null
 
+    // Avisa a la pantalla de chat abierta que llegó un nuevo % de batería (ver BATT: en
+    // NexuMeshManager), para refrescar el header/burbuja al instante en vez de esperar a que
+    // algo no relacionado repinte la UI.
+    var onBatteryUpdateListener: ((String, Int) -> Unit)? = null
+
     data class PendingFileInfo(val msgId: Long, val content: String, val type: String, val senderName: String, val isGroup: Boolean = false, val groupId: String? = null)
 
     val outgoingPayloadsTracker = mutableMapOf<Long, Long>()

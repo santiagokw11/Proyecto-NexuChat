@@ -322,6 +322,7 @@ class ChatActivity : AppCompatActivity() {
 
             P2PManager.onMessageReceivedListener = { incomingMsgId, texto, uriImagen ->
                 runOnUiThread {
+                    val horaLlegada = System.currentTimeMillis()
                     val isRefresh = texto.contains("SYS:REFRESH_GROUP")
                     val isEvent = texto.contains("SYS:EVENT:")
                     val isNudge = texto.contains("SYS:NUDGE")
@@ -353,20 +354,20 @@ class ChatActivity : AppCompatActivity() {
                         isEvent -> {
                             val eventText = texto.substringAfter("SYS:EVENT:")
                             val sender = if (isGroup) texto.substringAfter("GRP_IN_CHAT:").substringBefore(":") else chatIdentifier
-                            val newMsg = Message(incomingMsgId, eventText, null, false, 99, originalSender = sender, isGroup = isGroup)
+                            val newMsg = Message(incomingMsgId, eventText, null, false, 99, originalSender = sender, isGroup = isGroup, timestamp = horaLlegada)
                             adapter.addMessage(newMsg)
                             binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
                         }
                         isNudge -> {
                             val sender = if (isGroup) texto.substringAfter("GRP_IN_CHAT:").substringBefore(":") else chatIdentifier
-                            val newMsg = Message(incomingMsgId, "¡Te han enviado un zumbido! 📳", null, false, 99, originalSender = sender, isGroup = isGroup)
+                            val newMsg = Message(incomingMsgId, "¡Te han enviado un zumbido! 📳", null, false, 99, originalSender = sender, isGroup = isGroup, timestamp = horaLlegada)
                             adapter.addMessage(newMsg)
                             binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
                         }
                         texto.startsWith("GRP_IN_CHAT:") -> {
                             val parts = texto.split(":", limit = 3)
                             if (parts.size >= 3) {
-                                val newMsg = Message(incomingMsgId, parts[2], uriImagen, false, 0, progress = 100, originalSender = parts[1], isGroup = true)
+                                val newMsg = Message(incomingMsgId, parts[2], uriImagen, false, 0, progress = 100, originalSender = parts[1], isGroup = true, timestamp = horaLlegada)
                                 adapter.addMessage(newMsg)
                                 binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
                             }
@@ -375,7 +376,7 @@ class ChatActivity : AppCompatActivity() {
                             val parts = texto.split(":", limit = 4)
                             if (parts.size >= 4) {
                                 val expiresAt = if ((parts[2].toLongOrNull() ?: 0L) > 0) System.currentTimeMillis() + parts[2].toLong() else null
-                                val newMsg = Message(incomingMsgId, parts[3], uriImagen, false, 0, progress = 100, originalSender = parts[1], isGroup = true, expiresAt = expiresAt)
+                                val newMsg = Message(incomingMsgId, parts[3], uriImagen, false, 0, progress = 100, originalSender = parts[1], isGroup = true, expiresAt = expiresAt, timestamp = horaLlegada)
                                 adapter.addMessage(newMsg)
                                 if (expiresAt != null) activeMessagesTracker.add(newMsg)
                                 binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
@@ -385,7 +386,7 @@ class ChatActivity : AppCompatActivity() {
                             val parts = texto.split(":", limit = 3)
                             if (parts.size >= 3) {
                                 val expiresAt = if ((parts[1].toLongOrNull() ?: 0L) > 0) System.currentTimeMillis() + parts[1].toLong() else null
-                                val newMsg = Message(incomingMsgId, parts[2], uriImagen, false, 0, progress = 100, originalSender = chatIdentifier, isGroup = false, expiresAt = expiresAt)
+                                val newMsg = Message(incomingMsgId, parts[2], uriImagen, false, 0, progress = 100, originalSender = chatIdentifier, isGroup = false, expiresAt = expiresAt, timestamp = horaLlegada)
                                 adapter.addMessage(newMsg)
                                 activeMessagesTracker.add(newMsg)
                                 binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
@@ -394,7 +395,7 @@ class ChatActivity : AppCompatActivity() {
                         else -> {
                             actualizarEstadoConexion()
                             val cleanText = if (texto.startsWith("TXT:") || texto.startsWith("EPH:")) texto.substringAfterLast(":", texto) else texto
-                            val newMsg = Message(incomingMsgId, cleanText, uriImagen, false, 0, progress = 100, originalSender = chatIdentifier, isGroup = false)
+                            val newMsg = Message(incomingMsgId, cleanText, uriImagen, false, 0, progress = 100, originalSender = chatIdentifier, isGroup = false, timestamp = horaLlegada)
                             adapter.addMessage(newMsg)
                             binding.rvMessages.scrollToPosition(adapter.itemCount - 1)
                         }
@@ -405,6 +406,15 @@ class ChatActivity : AppCompatActivity() {
             }
 
             P2PManager.onMessageSentListener = { msgId -> runOnUiThread { adapter.updateMessageStatus(msgId, 1); adapter.updateProgress(msgId, 100) } }
+
+            // Refresca batería al instante al llegar "BATT:" en vez de esperar a que algo
+            // no relacionado (mensaje, typing) repinte la UI.
+            P2PManager.onBatteryUpdateListener = { nombre, _ ->
+                runOnUiThread {
+                    if (nombre == chatIdentifier) actualizarEstadoConexion()
+                    if (isGroup) adapter.notifyDataSetChanged()
+                }
+            }
         }
 
         binding.btnBack.setOnClickListener { finish() }
@@ -1034,7 +1044,7 @@ class ChatActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 setupRecyclerView(); activeMessagesTracker.clear()
                 cleanHistory.forEach { entidad ->
-                    val msg = Message(entidad.msgId, entidad.text, if (entidad.imagePath.isNullOrEmpty()) null else Uri.parse(entidad.imagePath), entidad.isMine, entidad.status, originalSender = entidad.originalSender, isGroup = entidad.isGroup, expiresAt = entidad.expiresAt)
+                    val msg = Message(entidad.msgId, entidad.text, if (entidad.imagePath.isNullOrEmpty()) null else Uri.parse(entidad.imagePath), entidad.isMine, entidad.status, originalSender = entidad.originalSender, isGroup = entidad.isGroup, expiresAt = entidad.expiresAt, timestamp = entidad.timestamp)
                     adapter.addMessage(msg)
                     if (entidad.expiresAt != null) activeMessagesTracker.add(msg)
                 }
